@@ -225,22 +225,38 @@
     justify-content: center;
   }
 }
-/* Responsive Table Fix */
+/* ---------------- MOBILE RESPONSIVE TABLE ---------------- */
 @media (max-width: 600px) {
   .main .tableContainer {
     width: 100%;
-    overflow-x: auto;   /* ✅ Horizontal scroll enable */
+    overflow-x: auto;          /* ✅ Enable horizontal scroll */
+    -webkit-overflow-scrolling: touch;
+    display: block;            /* ✅ Remove flex, scroll works */
   }
 
   .main .table {
-    font-size: 12px;    /* ✅ Small font for mobile */
-    min-width: 500px;   /* ✅ Prevent squeezing */
+    min-width: 650px;          /* ✅ Prevent squeeze */
+    font-size: 12px;           /* ✅ Small font */
+    border-collapse: collapse;
+    table-layout: auto;        /* ✅ Columns auto adjust */
   }
 
   .main .table th,
   .main .table td {
-    padding: 8px;       /* ✅ Reduce padding */
-    white-space: nowrap; /* ✅ Prevent line breaks */
+    padding: 8px 6px;
+    text-align: center;
+    white-space: nowrap;       /* ✅ No word break */
+  }
+
+  .main .table th {
+    font-size: 13px;
+  }
+
+  /* Clock & Date shrink */
+  .display-time {
+    font-size: 1.8rem;
+  }
+  .display-date {
+    font-size: 1rem;
   }
 }
-
