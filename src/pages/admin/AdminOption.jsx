@@ -119,14 +119,21 @@ const fetchAttendanceByEmployeeId = async () => {
         * { box-sizing: border-box; }
         body, html, #root { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background: #f8f9fa; }
 
-        .dashboard-container { display: flex; flex-direction: column; min-height: 100vh; }
+        .dashboard-container {
+  display: flex;
+  min-height: 100vh;
+  background: #f8f9fa;
+}
 
-        /* Sidebar = Top Profile Section */
-        .sidebar {
-          background: #00a6ff; color: #fff;
-          text-align: center;
-          padding: 20px;
-        }
+/* Sidebar desktop */
+.sidebar {
+  width: 280px;
+  background: #00a6ff;
+  color: #fff;
+  text-align: center;
+  padding: 20px;
+  flex-shrink: 0;
+}
         .sidebar img {
           border-radius: 50%;
           width: 90px; height: 90px;
@@ -138,12 +145,21 @@ const fetchAttendanceByEmployeeId = async () => {
         .sidebar h3 { margin: 5px 0; }
         .sidebar p { margin: 0; font-size: 0.9rem; }
 
-        /* Right Panel */
-        .right-panel { flex: 1; padding: 20px; background: #fff; overflow-y: auto; }
-        .top-logos { display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+        .right-panel {
+  flex: 1;
+  padding: 30px;
+  background: #fff;
+  overflow-y: auto;     /* ✅ content not too wide */
+  margin: 0 auto;
+}
 
+/* Cards layout */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* ✅ wider for desktop */
+  gap: 20px;
+}
         /* Cards */
-        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
         .card {
           background: #f3f4f6;
           padding: 12px;
@@ -183,9 +199,20 @@ const fetchAttendanceByEmployeeId = async () => {
 
         /* Responsive */
         @media (max-width: 768px) {
-          .cards { grid-template-columns: 1fr; }
-          .top-logos { flex-direction: column; align-items: center; }
-        }
+          .dashboard-container {
+    flex-direction: column;   /* ✅ stack on mobile */
+  }
+  .sidebar {
+    width: 100%;
+  }
+  .right-panel {
+    max-width: 100%;
+    padding: 15px;
+  }
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}
       `}</style>
 
       <div className="dashboard-container">

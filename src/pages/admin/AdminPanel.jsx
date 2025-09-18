@@ -53,26 +53,40 @@ export default function AdminPanel() {
     [name]: newValue,
   }));
 };
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const token = JSON.parse(localStorage.getItem("auth"))?.session?.access_token;
-      if (!token) throw new Error("No access token found");
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const token = JSON.parse(localStorage.getItem("auth"))?.session?.access_token;
+    if (!token) throw new Error("No access token found");
 
-      const payload = new FormData();
-      Object.keys(formData).forEach(key => {
-        if (formData[key]) payload.append(key, formData[key]);
-      });
+    const payload = new FormData();
+    Object.keys(formData).forEach(key => {
+      if (formData[key]) payload.append(key, formData[key]);
+    });
 
+    const response = await fetch("https://attendance-backend-5cvu.onrender.com/auth/create-user", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`, // 🔑 include token for auth
+      },
+      body: payload, // 👈 FormData will include text + file
+    });
 
-
-      alert("✅ User created successfully!");
-      navigate("/admin/dashboard");
-    } catch (error) {
-      console.error("User creation failed:", error.response?.data || error.message);
-      alert("❌ Failed to create user. Check console for details.");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to create user");
     }
-  };
+
+    const result = await response.json();
+    console.log("✅ User created:", result);
+
+    alert("✅ User created successfully!");
+    navigate("/admin/dashboard");
+  } catch (error) {
+    console.error("User creation failed:", error.message);
+    alert("❌ Failed to create user. Check console for details.");
+  }
+};
 
   return (
     <div className="container">
