@@ -65,7 +65,7 @@ export default function UserDashboard() {
   const fetchUser = async (userId) => {
     try {
       const token = getToken();
-      const res = await fetch(`https://attendance-backend-5cvu.onrender.com/users/me?userId=${userId}`, {
+      const res = await fetch(`https://attendance-backend-d4vi.onrender.com/users/me?userId=${userId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to fetch user");
@@ -79,7 +79,7 @@ export default function UserDashboard() {
   const fetchAttendance = async (userId) => {
     try {
       const token = getToken();
-      const res = await fetch(`https://attendance-backend-5cvu.onrender.com/attendance/me?userId=${userId}`, {
+      const res = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/me?userId=${userId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to fetch attendance");
@@ -103,7 +103,7 @@ export default function UserDashboard() {
     setLoading(true);
     try {
       const token = getToken();
-      const res = await fetch("https://attendance-backend-5cvu.onrender.com/attendance/checkin", {
+      const res = await fetch("https://attendance-backend-d4vi.onrender.com/attendance/checkin", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -130,7 +130,7 @@ export default function UserDashboard() {
     setLoading(true);
     try {
       const token = getToken();
-      const res = await fetch("https://attendance-backend-5cvu.onrender.com/attendance/checkout", {
+      const res = await fetch("https://attendance-backend-d4vi.onrender.com/attendance/checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

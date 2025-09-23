@@ -8,7 +8,7 @@ export default function Attendance() {
 
   const fetchAttendance = async () => {
     try {
-      const res = await axios.get('https://attendance-backend-5cvu.onrender.com/attendance/all'); // Admin endpoint
+      const res = await axios.get('https://attendance-backend-d4vi.onrender.com/attendance/all'); // Admin endpoint
       setAttendanceData(res.data);
       setLoading(false);
     } catch (error) {

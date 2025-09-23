@@ -37,7 +37,7 @@ export default function AdminDashboard() {
         if (!token) throw new Error("No access token found. Please login again.");
 
         // Fetch all users
-        const usersRes = await axios.get("https://attendance-backend-5cvu.onrender.com/users/all", {
+        const usersRes = await axios.get("https://attendance-backend-d4vi.onrender.com/users/all", {
           headers: { Authorization: `Bearer ${token}` },
         });
 
