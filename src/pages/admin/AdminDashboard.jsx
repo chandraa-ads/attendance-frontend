@@ -1,143 +1,207 @@
-// src/components/admin/AdminDashboard.jsx
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../../assets/styles/AdminDashboard.css';
-import ChandraaLogo from "../../assets/images/CHANDRAA.png";
-import WebSixLogo from "../../assets/images/WEB SIX.png";
-export default function AdminDashboard() {
-  const [admin, setAdmin] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [feedback, setFeedback] = useState({ message: '', type: '' });
 
+export default function AdminDashboard() {
   const navigate = useNavigate();
+  const [admin, setAdmin] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    todayAttendance: 0,
+    presentToday: 0,
+    absentToday: 0
+  });
 
   useEffect(() => {
-    const fetchData = async () => {
+    // Check authentication
+    const authData = JSON.parse(localStorage.getItem("auth"));
+    if (!authData) {
+      navigate('/login');
+      return;
+    }
+    
+    const role = authData?.profile?.role || authData?.role;
+    if (role !== 'admin') {
+      navigate('/dashboard');
+      return;
+    }
+    
+    setAdmin(authData.profile || authData.user);
+    fetchStats();
+  }, [navigate]);
+
+  const fetchStats = async () => {
+    try {
       setLoading(true);
-      setFeedback({ message: '', type: '' });
-
-      try {
-        // Get admin info from localStorage
-        const authData = JSON.parse(localStorage.getItem("auth"));
-        if (!authData) {
-          throw new Error("No auth data found. Please login again.");
+      const token = getToken();
+      
+      // Fetch users
+      const usersRes = await fetch('http://localhost:3000/users/all', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const users = await usersRes.json();
+      
+      // Fetch today's attendance
+      const today = new Date().toISOString().split('T')[0];
+      const attendanceRes = await fetch(
+        `http://localhost:3000/attendance/all?date=${today}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
-
-        const profile = authData.profile || {};
-        setAdmin({
-          name: profile.name || "Admin",
-          email: profile.email || "admin@gmail.com",
-          profileUrl: profile.profile_url || "https://via.placeholder.com/130",
-          role: profile.role || "admin",
-        });
-
-        const token = authData.session?.access_token;
-        if (!token) throw new Error("No access token found. Please login again.");
-
-        // Fetch all users
-        const usersRes = await axios.get("https://attendance-backend-d4vi.onrender.com/users/all", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (Array.isArray(usersRes.data)) {
-          setUsers(usersRes.data);
-        } else {
-          setUsers([]);
-        }
-
-      } catch (error) {
-        console.error("Fetching users failed:", error);
-        setFeedback({ message: `❌ ${error.message}`, type: 'error' });
-        setAdmin(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  const handleAddUser = () => {
-    navigate('/admin/panel'); // navigate to Add User page
+      );
+      const attendance = await attendanceRes.json();
+      
+      const presentToday = attendance.filter(a => !a.is_absent && a.check_in).length;
+      const absentToday = attendance.filter(a => a.is_absent).length;
+      
+      setStats({
+        totalUsers: users.length,
+        todayAttendance: attendance.length,
+        presentToday,
+        absentToday
+      });
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) return <p style={{ padding: '20px', textAlign: 'center' }}>Loading...</p>;
-  if (!admin) return (
-    <div style={{ padding: '20px', textAlign: 'center' }}>
-      <p>Admin data not available. Please login again.</p>
-      <button className="btn" onClick={() => navigate('/login')}>Go to Login</button>
-    </div>
-  );
+  const getToken = () => {
+    const authData = JSON.parse(localStorage.getItem("auth"));
+    return authData?.session?.access_token || null;
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth');
+    navigate('/login');
+  };
+
+  if (!admin) {
+    return (
+      <div className="loading-container">
+        <div className="spinner"></div>
+        <p>Loading admin dashboard...</p>
+      </div>
+    );
+  }
 
   return (
-
-    <div className="container">
-      {/* Sidebar */}
-      <div className="sidebar">
-        <img src={admin.profileUrl} alt="Admin Profile" />
-        <h3>{admin.name}</h3>
-        <p>{admin.email}</p>
+    <div className="admin-dashboard-container">
+      {/* Header */}
+      <div className="admin-header">
+        <div className="header-content">
+          <h1>Admin Dashboard</h1>
+          <div className="admin-info">
+            <div className="admin-avatar">
+              {admin?.profile_url ? (
+                <img src={admin.profile_url} alt="Admin" />
+              ) : (
+                <span>{admin?.name?.charAt(0) || 'A'}</span>
+              )}
+            </div>
+            <div className="admin-details">
+              <h3>{admin.name}</h3>
+              <p>Administrator</p>
+            </div>
+            <button onClick={handleLogout} className="logout-btn">
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Main Content */}
-      <div className="main">
-        <div className="header">
-           <img src={ChandraaLogo} alt="Chandraa Ads" style={{ height: "50px" }} />
-                <img src={WebSixLogo} alt="Web Six" style={{ height: "50px" }} />
-        </div>
-
-        <h2>EMPLOYEE DETAILS</h2>
-
-        {/* Feedback */}
-        {feedback.message && (
-          <div className={`feedback ${feedback.type}`} style={{ marginBottom: '15px', textAlign: 'center' }}>
-            {feedback.message}
+      {/* Stats Cards */}
+      <div className="stats-section">
+        <h2>Overview</h2>
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon">👥</div>
+            <div className="stat-info">
+              <h3>Total Users</h3>
+              <p className="stat-value">{loading ? '...' : stats.totalUsers}</p>
+            </div>
           </div>
-        )}
-
-        {/* Users Table */}
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>E.ID</th>
-                <th>NAME</th>
-                <th>EMAIL</th>
-                <th>DESIGNATION</th>
-                <th>MOBILE</th>
-                <th>EMERGENCY NO</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.length > 0 ? users.map(user => (
-                <tr key={user.id}>
-                  <td>{user.employee_id || 'N/A'}</td>
-                  <td className="emp-name">
-                    <img src={user.profile_url || 'https://via.placeholder.com/40'} alt="Emp" className="emp-img" />
-                    {user.name || 'N/A'}
-                  </td>
-                  <td>{user.email || 'N/A'}</td>
-                  <td>{user.designation || 'N/A'}</td>
-                  <td>{user.mobile || 'N/A'}</td>
-                  <td>{user.ien || 'N/A'}</td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: 'center' }}>No users found</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          
+          <div className="stat-card">
+            <div className="stat-icon">📊</div>
+            <div className="stat-info">
+              <h3>Today's Attendance</h3>
+              <p className="stat-value">{loading ? '...' : stats.todayAttendance}</p>
+            </div>
+          </div>
+          
+          <div className="stat-card">
+            <div className="stat-icon">✅</div>
+            <div className="stat-info">
+              <h3>Present Today</h3>
+              <p className="stat-value present">{loading ? '...' : stats.presentToday}</p>
+            </div>
+          </div>
+          
+          <div className="stat-card">
+            <div className="stat-icon">❌</div>
+            <div className="stat-info">
+              <h3>Absent Today</h3>
+              <p className="stat-value absent">{loading ? '...' : stats.absentToday}</p>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-  <button className="btn" onClick={handleAddUser}>➕ Add User</button>
-  <button className="btn" onClick={() => navigate('/admin/option')}>📊 Dashboard</button>
-</div>
+      {/* Quick Actions */}
+      <div className="actions-section">
+        <h2>Quick Actions</h2>
+        <div className="actions-grid">
+          <button 
+            onClick={() => navigate('/admin/attendance/manual')}
+            className="action-card"
+          >
+            <div className="action-icon">✏️</div>
+            <h3>Manual Attendance</h3>
+            <p>Mark attendance for users</p>
+          </button>
+          
+          <button 
+            onClick={() => navigate('/admin/attendance/all')}
+            className="action-card"
+          >
+            <div className="action-icon">📋</div>
+            <h3>View All Records</h3>
+            <p>See complete attendance history</p>
+          </button>
+          
+          <button 
+            onClick={() => alert('User management feature coming soon')}
+            className="action-card"
+          >
+            <div className="action-icon">👥</div>
+            <h3>Manage Users</h3>
+            <p>Add, edit or remove users</p>
+          </button>
+          
+          <button 
+            onClick={() => alert('Reports feature coming soon')}
+            className="action-card"
+          >
+            <div className="action-icon">📈</div>
+            <h3>Generate Reports</h3>
+            <p>Create attendance reports</p>
+          </button>
+        </div>
+      </div>
 
-
+      {/* Recent Activity */}
+      <div className="activity-section">
+        <h2>Recent Activity</h2>
+        <div className="activity-list">
+          <p className="no-activity">
+            No recent activity to display
+            <br />
+            <small>Activity log will appear here</small>
+          </p>
+        </div>
       </div>
     </div>
   );

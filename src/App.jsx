@@ -1,86 +1,75 @@
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 
 import LoginForm from './components/LoginForm';
-import ProfileForm from './pages/ProfileForm';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminAttendance from './pages/admin/Attendance';
-import AdminLeave from './pages/admin/Leave';
-import AdminPanel from './pages/admin/AdminPanel';
-import AdminOption from './pages/admin/AdminOption';
+import AdminManualAttendance from './pages/admin/AdminManualAttendance';
+import AdminAllAttendance from './pages/admin/AdminAllAttendance';
 
 // User Pages
 import UserDashboard from './pages/user/UserDashboard';
-import UserAttendance from './pages/user/Attendance';
-import UserLeave from './pages/user/Leave';
+
+// Error Pages
+import Unauthorized from './pages/errors/Unauthorized';
+import NotFound from './pages/errors/NotFound';
 
 export default function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
-        <Route path="/login" element={<LoginForm />} />
-        <Route 
-          path="/profile" 
-          element={
-            <ProtectedRoute>
-              <ProfileForm />
-            </ProtectedRoute>
-          } 
-        />
+      <AuthProvider>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<Navigate to="/login" />} />
+          <Route path="/login" element={<LoginForm />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
+          <Route path="/404" element={<NotFound />} />
 
-        {/* ✅ Admin Option Route */}
-        <Route 
-          path="/admin/option"
-          element={
-            <ProtectedRoute role="admin">
-              <AdminOption />
-            </ProtectedRoute>
-          }
-        />
+          {/* User Dashboard */}
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute>
+                <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* ✅ Admin Dashboard with nested routes */}
-        <Route 
-          path="/admin/dashboard" 
-          element={
-            <ProtectedRoute role="admin">
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="attendance" element={<AdminAttendance />} />
-          <Route path="leave" element={<AdminLeave />} />
-        </Route>
+          {/* Admin Routes */}
+          <Route 
+            path="/admin/dashboard" 
+            element={
+              <ProtectedRoute role="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* ✅ Admin Panel Route */}
-        <Route
-          path="/admin/panel"
-          element={
-            <ProtectedRoute role="admin">
-              <AdminPanel />
-            </ProtectedRoute>
-          }
-        />
+          <Route 
+            path="/admin/attendance/manual" 
+            element={
+              <ProtectedRoute role="admin">
+                <AdminManualAttendance />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* ✅ User Routes */}
-        <Route 
-          path="/dashboard" 
-          element={
-            <ProtectedRoute role="user">
-              <UserDashboard />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="attendance" element={<UserAttendance />} />
-          <Route path="leave" element={<UserLeave />} />
-        </Route>
+          <Route 
+            path="/admin/attendance/all" 
+            element={
+              <ProtectedRoute role="admin">
+                <AdminAllAttendance />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Fallback Route */}
-        <Route path="*" element={<h1>404 Not Found</h1>} />
-      </Routes>
+          {/* Fallback Route */}
+          <Route path="*" element={<Navigate to="/404" />} />
+        </Routes>
+      </AuthProvider>
     </Router>
   );
 }
