@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import '../../assets/styles/AdminAllAttendance.css';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
 import * as XLSX from 'xlsx';
 
 export default function AdminAllAttendance() {
