@@ -37,7 +37,7 @@ export default function AdminDashboard() {
       const token = getToken();
       
       // Fetch users
-      const usersRes = await fetch('http://localhost:3000/users/all', {
+      const usersRes = await fetch('https://attendance-backend-d4vi.onrender.com/users/all', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const users = await usersRes.json();
@@ -45,7 +45,7 @@ export default function AdminDashboard() {
       // Fetch today's attendance
       const today = new Date().toISOString().split('T')[0];
       const attendanceRes = await fetch(
-        `http://localhost:3000/attendance/all?date=${today}`,
+        `https://attendance-backend-d4vi.onrender.com/attendance/all?date=${today}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }

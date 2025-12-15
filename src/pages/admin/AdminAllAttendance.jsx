@@ -34,7 +34,7 @@ export default function AdminAllAttendance() {
     try {
       setLoading(true);
       const token = getToken();
-      const res = await fetch('http://localhost:3000/attendance/all', {
+      const res = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/all', {
         headers: token ? { 
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'

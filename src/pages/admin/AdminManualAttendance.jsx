@@ -66,7 +66,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch('http://localhost:3000/users/all', {
+      const res = await fetch('https://attendance-backend-d4vi.onrender.com/users/all', {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -97,7 +97,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch(`http://localhost:3000/attendance/all?date=${selectedDate}`, {
+      const res = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${selectedDate}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -129,7 +129,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      let url = 'http://localhost:3000/attendance/filter?';
+      let url = 'https://attendance-backend-d4vi.onrender.com/attendance/filter?';
       const params = [];
       
       if (filters.startDate) params.push(`startDate=${filters.startDate}`);
@@ -372,7 +372,7 @@ export default function AdminManualAttendance() {
         checkOut: record.status === 'present' ? record.checkOut : null
       };
 
-      const res = await fetch('http://localhost:3000/attendance/manual', {
+      const res = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -467,7 +467,7 @@ export default function AdminManualAttendance() {
       for (const batch of batches) {
         const results = await Promise.allSettled(
           batch.map(record => 
-            fetch('http://localhost:3000/attendance/manual', {
+            fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
