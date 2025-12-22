@@ -9,6 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminManualAttendance from './pages/admin/AdminManualAttendance';
 import AdminAllAttendance from './pages/admin/AdminAllAttendance';
+import Profile from './pages/Profile';
 
 // User Pages
 import UserDashboard from './pages/user/UserDashboard';
@@ -65,6 +66,18 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+
+          {/* Admin Profile – ONLY ADMIN CAN ACCESS */}
+<Route 
+  path="/admin/profile"
+  element={
+    <ProtectedRoute role="admin">
+      <Profile />
+    </ProtectedRoute>
+  }
+/>
+
 
           {/* Fallback Route */}
           <Route path="*" element={<Navigate to="/404" />} />

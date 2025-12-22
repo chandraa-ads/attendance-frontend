@@ -173,7 +173,7 @@ export default function AdminDashboard() {
           </button>
           
           <button 
-            onClick={() => alert('User management feature coming soon')}
+            onClick={() => navigate('/admin/profile')}
             className="action-card"
           >
             <div className="action-icon">👥</div>
