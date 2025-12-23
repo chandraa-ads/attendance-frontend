@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
@@ -17,6 +18,7 @@ import UserDashboard from './pages/user/UserDashboard';
 // Error Pages
 import Unauthorized from './pages/errors/Unauthorized';
 import NotFound from './pages/errors/NotFound';
+import Reportss from './pages/admin/Reports';
 
 export default function App() {
   return (
@@ -67,17 +69,23 @@ export default function App() {
             }
           />
 
-
           {/* Admin Profile – ONLY ADMIN CAN ACCESS */}
-<Route 
-  path="/admin/profile"
-  element={
-    <ProtectedRoute role="admin">
-      <Profile />
-    </ProtectedRoute>
-  }
-/>
-
+          <Route 
+            path="/admin/profile"
+            element={
+              <ProtectedRoute role="admin">
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+            <Route 
+            path="/admin/reports"
+            element={
+              <ProtectedRoute role="admin">
+                <Reportss />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Fallback Route */}
           <Route path="*" element={<Navigate to="/404" />} />

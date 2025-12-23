@@ -1,5 +1,5 @@
+// src/contexts/AuthContext.jsx
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext(null);
 
@@ -12,7 +12,6 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const navigate = useNavigate();
   const [authState, setAuthState] = useState({
     user: null,
     role: null,
@@ -60,7 +59,7 @@ export const AuthProvider = ({ children }) => {
                       auth?.user?.user_metadata?.role || 
                       userProfile?.user_metadata?.role || 
                       'user';
-      const token = auth.session?.access_token || null;
+      const token = auth.session?.access_token || auth.access_token || auth.token || null;
 
       setAuthState({
         user: userProfile,
@@ -90,7 +89,7 @@ export const AuthProvider = ({ children }) => {
                     authData?.user?.user_metadata?.role || 
                     userProfile?.user_metadata?.role || 
                     'user';
-    const token = authData.session?.access_token || null;
+    const token = authData.session?.access_token || authData.access_token || authData.token || null;
 
     setAuthState({
       user: userProfile,
@@ -110,7 +109,7 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated: false,
       token: null
     });
-    navigate('/login');
+    // Redirect will be handled by ProtectedRoute or component
   };
 
   const updateUser = (userData) => {

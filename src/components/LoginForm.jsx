@@ -3,11 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUser, faKey, faEye, faEyeSlash, faSignInAlt } from '@fortawesome/free-solid-svg-icons';
-
-import chandraaLogo from '../assets/images/CHANDRAA.png';
-import webSixLogo from '../assets/images/WEB SIX.png';
-import '../assets/styles/LoginForm.css';
-
+import '../assets/styles/LoginForm.css'
 export default function LoginForm() {
   const { register, handleSubmit, formState: { errors } } = useForm();
   const [showPassword, setShowPassword] = useState(false);
@@ -15,9 +11,6 @@ export default function LoginForm() {
   const [redirected, setRedirected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-
-  // Button hover state
-  const [btnHover, setBtnHover] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -70,10 +63,8 @@ export default function LoginForm() {
       // Store auth data with proper token extraction
       const authData = {
         ...loginRes,
-        // Extract access token from session or direct response
         access_token: loginRes.access_token || loginRes.session?.access_token,
         token: loginRes.access_token || loginRes.session?.access_token,
-        // Store user profile information
         profile: loginRes.profile || {
           id: loginRes.user?.id,
           name: loginRes.user?.user_metadata?.name || loginRes.user?.name,
@@ -81,21 +72,13 @@ export default function LoginForm() {
           role: loginRes.user?.user_metadata?.role || loginRes.role || 'user',
           profile_url: loginRes.profile_url
         },
-        // Store role separately for easy access
         role: loginRes.profile?.role || loginRes.user?.user_metadata?.role || loginRes.role || 'user'
       };
 
       // Save to localStorage
       localStorage.setItem("auth", JSON.stringify(authData));
       
-      // Debug: Log stored data
-      console.log("Auth data stored successfully:", {
-        hasToken: !!authData.access_token,
-        role: authData.role,
-        user: authData.profile?.name
-      });
-
-      setFeedback({ message: '✅ Login successful! Redirecting...', type: 'success' });
+      setFeedback({ message: 'Login successful! Redirecting...', type: 'success' });
 
       // Redirect based on role
       const role = authData.role;
@@ -107,7 +90,7 @@ export default function LoginForm() {
     } catch (err) {
       console.error('Login error:', err);
       setFeedback({ 
-        message: `❌ ${err.message || 'Invalid credentials. Please try again.'}`, 
+        message: `${err.message || 'Invalid credentials. Please try again.'}`, 
         type: 'error' 
       });
     } finally {
@@ -116,28 +99,32 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="root">
-      <div className="top-bar" aria-hidden="true" />
-      <main className="page" role="main">
-        {/* Brand Logos */}
-        <div className="brand-left" aria-hidden="true">
-          <img src={chandraaLogo} alt="CHANDRAA ADS AND EVENTS" />
-        </div>
-        <div className="brand-right" aria-hidden="true">
-          <img src={webSixLogo} alt="WEB MEDIA 6" />
+    <div className="login-page">
+      <div className="login-container">
+        {/* Header */}
+        <div className="login-header">
+          <div className="logo">
+            <div className="logo-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+            </div>
+            <h1>Attendance System</h1>
+          </div>
+          <p className="subtitle">Sign in to access your account</p>
         </div>
 
         {/* Login Form */}
-        <div className="center-column" aria-labelledby="login-heading">
-          <h1 id="login-heading" className="title">ATTENDANCE SYSTEM LOGIN</h1>
-          <form className="card" onSubmit={handleSubmit(onSubmit)} aria-label="Login form">
-            
-            {/* Email Field */}
-            <div className="field">
-              <FontAwesomeIcon icon={faUser} className="left-icon" />
+        <form className="login-form" onSubmit={handleSubmit(onSubmit)}>
+          {/* Email Field */}
+          <div className="form-group">
+            <div className="input-group">
+              <div className="input-icon">
+                <FontAwesomeIcon icon={faUser} />
+              </div>
               <input
                 type="email"
-                placeholder="Email Address"
+                placeholder="Email address"
                 autoComplete="email"
                 disabled={isLoading}
                 {...register('email', { 
@@ -147,16 +134,20 @@ export default function LoginForm() {
                     message: 'Invalid email address'
                   }
                 })}
-                className={errors.email ? 'error' : ''}
+                className={errors.email ? 'input-error' : ''}
               />
-              {errors.email && (
-                <span className="error-message">{errors.email.message}</span>
-              )}
             </div>
+            {errors.email && (
+              <span className="error-message">{errors.email.message}</span>
+            )}
+          </div>
 
-            {/* Password Field */}
-            <div className="field">
-              <FontAwesomeIcon icon={faKey} className="left-icon" />
+          {/* Password Field */}
+          <div className="form-group">
+            <div className="input-group">
+              <div className="input-icon">
+                <FontAwesomeIcon icon={faKey} />
+              </div>
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
@@ -169,91 +160,67 @@ export default function LoginForm() {
                     message: 'Password must be at least 6 characters'
                   }
                 })}
-                className={errors.password ? 'error' : ''}
+                className={errors.password ? 'input-error' : ''}
               />
-              <FontAwesomeIcon
-                icon={showPassword ? faEyeSlash : faEye}
-                className="right-icon"
+              <button
+                type="button"
+                className="password-toggle"
                 onClick={() => !isLoading && setShowPassword(!showPassword)}
-                style={{ cursor: isLoading ? 'not-allowed' : 'pointer' }}
-              />
-              {errors.password && (
-                <span className="error-message">{errors.password.message}</span>
-              )}
+                disabled={isLoading}
+              >
+                <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} />
+              </button>
             </div>
-
-            {/* Remember Me */}
-            <label className="row-remember" htmlFor="remember">
-              <input type="checkbox" id="remember" disabled={isLoading} />
-              <span>Remember me</span>
-            </label>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`btn ${btnHover ? 'btn-hover' : ''} ${isLoading ? 'btn-loading' : ''}`}
-              onMouseEnter={() => !isLoading && setBtnHover(true)}
-              onMouseLeave={() => !isLoading && setBtnHover(false)}
-            >
-              {isLoading ? (
-                <>
-                  <span className="spinner"></span>
-                  Logging in...
-                </>
-              ) : (
-                <>
-                  SIGN IN <FontAwesomeIcon icon={faSignInAlt} />
-                </>
-              )}
-            </button>
-
-            {/* Feedback Message */}
-            {feedback.message && (
-              <div className={`feedback ${feedback.type === 'success' ? 'feedback-success' : 'feedback-error'}`}>
-                {feedback.message}
-              </div>
+            {errors.password && (
+              <span className="error-message">{errors.password.message}</span>
             )}
+          </div>
 
-            {/* Divider */}
-            <div className="divider" aria-hidden="true">
-              <div className="divider-line" />
-              <span>or continue with</span>
-              <div className="divider-line" />
-            </div>
+          {/* Remember Me */}
+          <div className="form-options">
+            <label className="checkbox">
+              <input 
+                type="checkbox" 
+                id="remember" 
+                disabled={isLoading}
+                className="checkbox-input"
+              />
+              <span className="checkbox-box"></span>
+              <span className="checkbox-label">Remember me</span>
+            </label>
+          </div>
 
-            {/* Socials */}
-            <div className="socials" aria-label="Social login">
-              <button type="button" className="social-btn" disabled={isLoading}>
-                <img
-                  src="https://cdn-icons-png.flaticon.com/512/124/124010.png"
-                  alt="Facebook login"
-                />
-              </button>
-              <button type="button" className="social-btn" disabled={isLoading}>
-                <img
-                  src="https://cdn-icons-png.flaticon.com/512/300/300221.png"
-                  alt="Google login"
-                />
-              </button>
-              <button type="button" className="social-btn" disabled={isLoading}>
-                <img
-                  src="https://cdn-icons-png.flaticon.com/512/732/732223.png"
-                  alt="Outlook login"
-                />
-              </button>
-            </div>
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`login-button ${isLoading ? 'loading' : ''}`}
+          >
+            {isLoading ? (
+              <>
+                <span className="spinner"></span>
+                Signing in...
+              </>
+            ) : (
+              <>
+                Sign In <FontAwesomeIcon icon={faSignInAlt} />
+              </>
+            )}
+          </button>
 
-            {/* Forgot Password */}
-            <div className="forgot">
-              <button type="button" className="forgot-btn" disabled={isLoading}>
-                Forgot Password?
-              </button>
+          {/* Feedback Message */}
+          {feedback.message && (
+            <div className={`feedback-message ${feedback.type}`}>
+              <span>{feedback.message}</span>
             </div>
-          </form>
+          )}
+        </form>
+
+        {/* Footer */}
+        <div className="login-footer">
+          <p>Secure login 🔒</p>
         </div>
-      </main>
-      <div className="bottom-bar" aria-hidden="true" />
+      </div>
     </div>
   );
 }

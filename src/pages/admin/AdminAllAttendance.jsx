@@ -577,7 +577,7 @@ export default function AdminAllAttendance() {
                 className="export-btn pdf-backend "
                 disabled={generatingPDF}
               >
-                {generatingPDF ? '⏳ Generating...' : '🚀 Export PDF (Backend)'}
+                {generatingPDF ? '⏳ Generating...' : '🚀 Export PDF'}
               </button>
 
             </div>

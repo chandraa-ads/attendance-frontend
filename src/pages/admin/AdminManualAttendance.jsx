@@ -1,5 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Calendar,
+  Users,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Edit2,
+  Download,
+  Filter,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Building,
+  Briefcase,
+  Save,
+  Trash2,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight,
+  Upload,
+  BarChart2,
+  MoreVertical,
+  CheckSquare,
+  Square
+} from 'lucide-react';
 import '../../assets/styles/AdminManualAttendance.css';
 
 export default function AdminManualAttendance() {
@@ -14,19 +42,227 @@ export default function AdminManualAttendance() {
   const [bulkAction, setBulkAction] = useState('present');
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [absenceReason, setAbsenceReason] = useState('');
-  const [message, setMessage] = useState({ text: '', type: '' });
+  const [message, setMessage] = useState({ text: '', type: '', visible: false });
   const [existingAttendance, setExistingAttendance] = useState({});
   const [allAttendanceData, setAllAttendanceData] = useState([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [viewMode, setViewMode] = useState('marker'); // 'marker' or 'viewer'
 
-
+  // Permission states
   const [permissionFrom, setPermissionFrom] = useState('');
   const [permissionTo, setPermissionTo] = useState('');
   const [permissionReason, setPermissionReason] = useState('');
+  // Handle permission submission
+  const handlePermissionSubmit = async (userId) => {
+    if (!permissionFrom || !permissionTo) {
+      showMessage('Please provide permission start and end times', 'warning');
+      return;
+    }
+
+    if (!permissionReason.trim()) {
+      showMessage('Please provide permission reason', 'warning');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const token = getToken();
+      if (!token) return;
+
+      const user = users.find(u => u.id === userId);
+      if (!user) {
+        showMessage('User not found', 'error');
+        return;
+      }
+
+      // Prepare permission payload
+      const payload = {
+        userId: userId,
+        date: selectedDate,
+        permissionFrom: permissionFrom,
+        permissionTo: permissionTo,
+        reason: permissionReason.trim()
+      };
+
+      // Optional check-in/out times if user wants to mark them
+      const record = attendanceRecords[userId];
+      if (record?.checkIn && record?.checkOut) {
+        payload.checkIn = record.checkIn;
+        payload.checkOut = record.checkOut;
+      }
+
+      // Send request to permission endpoint
+      const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        showMessage(`Permission recorded for ${user.name}`, 'success');
+
+        // Update local state
+        const updatedRecords = { ...attendanceRecords };
+        updatedRecords[userId] = {
+          ...updatedRecords[userId],
+          status: 'permission',
+          permissionTime: `${permissionFrom}-${permissionTo}`,
+          permissionReason: permissionReason,
+          alreadyMarked: true,
+          manualEntry: true
+        };
+        setAttendanceRecords(updatedRecords);
+
+        // Clear permission fields
+        setPermissionFrom('');
+        setPermissionTo('');
+        setPermissionReason('');
+
+        // Refresh data
+        fetchExistingAttendance();
+      } else {
+        const error = await response.json();
+        showMessage(error.message || 'Failed to record permission', 'error');
+      }
+    } catch (err) {
+      console.error("Permission error:", err);
+      showMessage('Error: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  // Handle bulk permission for multiple users
+  const handleBulkPermission = async () => {
+    if (selectedUsers.length === 0) {
+      showMessage('Please select users for permission', 'warning');
+      return;
+    }
+
+    if (!permissionFrom || !permissionTo) {
+      showMessage('Please provide permission start and end times', 'warning');
+      return;
+    }
+
+    if (!permissionReason.trim()) {
+      showMessage('Please provide permission reason', 'warning');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const token = getToken();
+      if (!token) return;
+
+      const results = [];
+      const errors = [];
+
+      // Process each selected user
+      for (const userId of selectedUsers) {
+        try {
+          const user = users.find(u => u.id === userId);
+          if (!user) {
+            errors.push({ userId, error: 'User not found' });
+            continue;
+          }
+
+          // Prepare permission payload for each user
+          const payload = {
+            userId: userId,
+            date: selectedDate,
+            permissionFrom: permissionFrom,
+            permissionTo: permissionTo,
+            reason: permissionReason.trim()
+          };
+
+          // Check if record exists to preserve check-in/out times
+          const existing = existingAttendance[userId];
+          if (existing?.record?.check_in && existing?.record?.check_out) {
+            payload.checkIn = new Date(existing.record.check_in).toLocaleTimeString('en-IN', {
+              hour12: false,
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+            payload.checkOut = new Date(existing.record.check_out).toLocaleTimeString('en-IN', {
+              hour12: false,
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+          }
+
+          const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload),
+          });
+
+          if (response.ok) {
+            results.push({ userId, userName: user.name, success: true });
+          } else {
+            const error = await response.json();
+            errors.push({ userId, userName: user.name, error: error.message || 'Failed to record permission' });
+          }
+        } catch (err) {
+          errors.push({ userId, error: err.message || 'Unknown error' });
+        }
+      }
+
+      // Show summary message
+      if (results.length > 0) {
+        showMessage(`Permission recorded for ${results.length} user(s)`, 'success');
+
+        // Update local state for successful records
+        const updatedRecords = { ...attendanceRecords };
+        results.forEach(result => {
+          if (updatedRecords[result.userId]) {
+            updatedRecords[result.userId] = {
+              ...updatedRecords[result.userId],
+              status: 'permission',
+              permissionTime: `${permissionFrom}-${permissionTo}`,
+              permissionReason: permissionReason,
+              alreadyMarked: true,
+              manualEntry: true
+            };
+          }
+        });
+        setAttendanceRecords(updatedRecords);
+
+        // Clear permission fields and selections
+        setPermissionFrom('');
+        setPermissionTo('');
+        setPermissionReason('');
+        setSelectedUsers([]);
+
+        // Refresh data
+        fetchExistingAttendance();
+      }
+
+      if (errors.length > 0) {
+        console.error('Permission errors:', errors);
+        showMessage(`${errors.length} permission(s) failed`, 'error');
+      }
+
+    } catch (err) {
+      console.error("Bulk permission error:", err);
+      showMessage('Error: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Modal states
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Edit form data
   const [editAttendanceData, setEditAttendanceData] = useState({
@@ -40,14 +276,13 @@ export default function AdminManualAttendance() {
     halfDayType: 'morning',
     halfDayCheckIn: '09:30',
     halfDayCheckOut: '13:00',
-    // Add permission fields
     permissionFrom: '',
     permissionTo: '',
     permissionReason: '',
     notes: ''
   });
 
-  // Bulk edit data - add permission fields
+  // Bulk edit data
   const [bulkEditData, setBulkEditData] = useState({
     date: new Date().toISOString().split('T')[0],
     attendanceType: 'present',
@@ -57,12 +292,12 @@ export default function AdminManualAttendance() {
     halfDayType: 'morning',
     halfDayCheckIn: '09:30',
     halfDayCheckOut: '13:00',
-    // Add permission fields
     permissionFrom: '',
     permissionTo: '',
     permissionReason: '',
     notes: ''
   });
+
   // Filters
   const [filters, setFilters] = useState({
     name: '',
@@ -71,6 +306,19 @@ export default function AdminManualAttendance() {
     endDate: new Date().toISOString().split('T')[0],
     department: 'all',
     designation: 'all'
+  });
+
+  // UI states
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [expandedUsers, setExpandedUsers] = useState({});
+  const [stats, setStats] = useState({
+    present: 0,
+    absent: 0,
+    halfDay: 0,
+    permission: 0,
+    pending: 0
   });
 
   // Get token from localStorage
@@ -88,6 +336,12 @@ export default function AdminManualAttendance() {
       navigate('/login');
       return null;
     }
+  };
+
+  // Show message with timeout
+  const showMessage = (text, type) => {
+    setMessage({ text, type, visible: true });
+    setTimeout(() => setMessage(prev => ({ ...prev, visible: false })), 5000);
   };
 
   // Fetch users
@@ -115,12 +369,53 @@ export default function AdminManualAttendance() {
 
       const data = await res.json();
       setUsers(data);
+
+      // Initialize attendance records
+      initializeAttendanceRecords([], data);
+
+      // Calculate initial stats
+      calculateStats(data);
     } catch (err) {
       console.error("Users fetch error", err);
-      setMessage({ text: 'Error fetching users: ' + err.message, type: 'error' });
+      showMessage('Error fetching users: ' + err.message, 'error');
     } finally {
       setUsersLoading(false);
     }
+  };
+
+  // Calculate statistics
+  const calculateStats = (usersData) => {
+    const newStats = {
+      present: 0,
+      absent: 0,
+      halfDay: 0,
+      permission: 0,
+      pending: 0,
+      total: usersData.length
+    };
+
+    Object.values(attendanceRecords).forEach(record => {
+      switch (record.status) {
+        case 'present':
+          newStats.present++;
+          break;
+        case 'absent':
+          newStats.absent++;
+          break;
+        case 'half-day-morning':
+        case 'half-day-afternoon':
+          newStats.halfDay++;
+          break;
+        case 'permission':
+          newStats.permission++;
+          break;
+        case 'pending':
+          newStats.pending++;
+          break;
+      }
+    });
+
+    setStats(newStats);
   };
 
   // Fetch existing attendance for selected date
@@ -166,9 +461,9 @@ export default function AdminManualAttendance() {
   };
 
   // Initialize attendance records
-  const initializeAttendanceRecords = (existingData = []) => {
+  const initializeAttendanceRecords = (existingData = [], usersData = users) => {
     const records = {};
-    users.forEach(user => {
+    usersData.forEach(user => {
       const existing = existingData.find(record => record.user_id === user.id);
       if (existing) {
         records[user.id] = {
@@ -206,6 +501,7 @@ export default function AdminManualAttendance() {
       }
     });
     setAttendanceRecords(records);
+    calculateStats(usersData);
   };
 
   // Fetch all attendance for viewer mode
@@ -240,7 +536,7 @@ export default function AdminManualAttendance() {
       }
     } catch (err) {
       console.error("Error fetching all attendance:", err);
-      setMessage({ text: 'Error fetching attendance data: ' + err.message, type: 'error' });
+      showMessage('Error fetching attendance data: ' + err.message, 'error');
     } finally {
       setAttendanceLoading(false);
     }
@@ -269,7 +565,6 @@ export default function AdminManualAttendance() {
         new Date(existing.record.check_in).toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '09:30',
       halfDayCheckOut: existing?.record.check_out ?
         new Date(existing.record.check_out).toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '13:00',
-      // Add permission data
       permissionFrom: existing?.record.permission_time ?
         existing.record.permission_time.split('-')[0]?.trim() : '',
       permissionTo: existing?.record.permission_time ?
@@ -280,10 +575,11 @@ export default function AdminManualAttendance() {
 
     setShowEditModal(true);
   };
+
   // Handle bulk edit click
   const handleBulkEditClick = () => {
     if (selectedUsers.length === 0) {
-      setMessage({ text: 'Please select users for bulk edit', type: 'warning' });
+      showMessage('Please select users for bulk edit', 'warning');
       return;
     }
 
@@ -311,11 +607,11 @@ export default function AdminManualAttendance() {
       // Validation for permission
       if (editAttendanceData.attendanceType === 'permission') {
         if (!editAttendanceData.permissionFrom || !editAttendanceData.permissionTo) {
-          setMessage({ text: 'Please provide permission start and end times', type: 'warning' });
+          showMessage('Please provide permission start and end times', 'warning');
           return;
         }
         if (!editAttendanceData.permissionReason.trim()) {
-          setMessage({ text: 'Please provide permission reason', type: 'warning' });
+          showMessage('Please provide permission reason', 'warning');
           return;
         }
       }
@@ -323,7 +619,7 @@ export default function AdminManualAttendance() {
       // Check if date is in future
       const today = new Date().toISOString().split('T')[0];
       if (editAttendanceData.date > today) {
-        setMessage({ text: 'Cannot mark attendance for future dates', type: 'warning' });
+        showMessage('Cannot mark attendance for future dates', 'warning');
         return;
       }
 
@@ -412,9 +708,8 @@ export default function AdminManualAttendance() {
           body: JSON.stringify(payload),
         });
       } else {
-        // Create new record - check if it's permission
+        // Create new record
         if (editAttendanceData.attendanceType === 'permission') {
-          // Use permission endpoint
           response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
             method: 'POST',
             headers: {
@@ -433,7 +728,6 @@ export default function AdminManualAttendance() {
             }),
           });
         } else {
-          // Use regular attendance endpoint
           response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
             method: 'POST',
             headers: {
@@ -446,10 +740,7 @@ export default function AdminManualAttendance() {
       }
 
       if (response.ok) {
-        setMessage({
-          text: `Attendance ${existingRecordId ? 'updated' : 'added'} for ${editAttendanceData.userName} on ${editAttendanceData.date}`,
-          type: 'success'
-        });
+        showMessage(`Attendance ${existingRecordId ? 'updated' : 'added'} for ${editAttendanceData.userName}`, 'success');
         setShowEditModal(false);
 
         // Refresh data
@@ -463,10 +754,10 @@ export default function AdminManualAttendance() {
 
       } else {
         const error = await response.json();
-        setMessage({ text: error.message || 'Failed to update attendance', type: 'error' });
+        showMessage(error.message || 'Failed to update attendance', 'error');
       }
     } catch (err) {
-      setMessage({ text: 'Error: ' + err.message, type: 'error' });
+      showMessage('Error: ' + err.message, 'error');
     }
   };
 
@@ -476,14 +767,14 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      // Validation for permission in bulk edit
+      // Validation
       if (bulkEditData.attendanceType === 'permission') {
         if (!bulkEditData.permissionFrom || !bulkEditData.permissionTo) {
-          setMessage({ text: 'Please provide permission start and end times', type: 'warning' });
+          showMessage('Please provide permission start and end times', 'warning');
           return;
         }
         if (!bulkEditData.permissionReason.trim()) {
-          setMessage({ text: 'Please provide permission reason', type: 'warning' });
+          showMessage('Please provide permission reason', 'warning');
           return;
         }
       }
@@ -496,7 +787,7 @@ export default function AdminManualAttendance() {
           const user = users.find(u => u.id === userId);
           if (!user) continue;
 
-          // Prepare payload for each user
+          // Prepare payload
           let payload = {
             userId: userId,
             date: bulkEditData.date,
@@ -566,7 +857,6 @@ export default function AdminManualAttendance() {
 
           let response;
           if (existingRecordId) {
-            // Update existing record
             response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existingRecordId}`, {
               method: 'PUT',
               headers: {
@@ -576,7 +866,6 @@ export default function AdminManualAttendance() {
               body: JSON.stringify(payload),
             });
           } else {
-            // Create new record - check if permission
             if (bulkEditData.attendanceType === 'permission') {
               response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
                 method: 'POST',
@@ -618,10 +907,7 @@ export default function AdminManualAttendance() {
         }
       }
 
-      setMessage({
-        text: `Bulk edit completed: ${results.length} successful, ${errors.length} failed`,
-        type: results.length > 0 ? 'success' : 'error'
-      });
+      showMessage(`Bulk edit: ${results.length} successful, ${errors.length} failed`, results.length > 0 ? 'success' : 'error');
 
       setShowBulkEditModal(false);
       setSelectedUsers([]);
@@ -636,10 +922,9 @@ export default function AdminManualAttendance() {
       }
 
     } catch (err) {
-      setMessage({ text: 'Error: ' + err.message, type: 'error' });
+      showMessage('Error: ' + err.message, 'error');
     }
   };
-
 
   // Handle date change
   const handleDateChange = (e) => {
@@ -674,25 +959,25 @@ export default function AdminManualAttendance() {
     }
   };
 
-  // Handle bulk action
+  // Apply bulk action
   const applyBulkAction = () => {
     if (selectedUsers.length === 0) {
-      setMessage({ text: 'Please select users for bulk action', type: 'warning' });
+      showMessage('Please select users for bulk action', 'warning');
       return;
     }
 
     if (bulkAction === 'absent' && !absenceReason.trim()) {
-      setMessage({ text: 'Please provide absence reason', type: 'warning' });
+      showMessage('Please provide absence reason', 'warning');
       return;
     }
 
     if (bulkAction === 'permission') {
       if (!permissionFrom || !permissionTo) {
-        setMessage({ text: 'Please provide permission start and end times', type: 'warning' });
+        showMessage('Please provide permission start and end times', 'warning');
         return;
       }
       if (!permissionReason.trim()) {
-        setMessage({ text: 'Please provide permission reason', type: 'warning' });
+        showMessage('Please provide permission reason', 'warning');
         return;
       }
     }
@@ -713,22 +998,20 @@ export default function AdminManualAttendance() {
     });
 
     setAttendanceRecords(updatedRecords);
-    setMessage({
-      text: `Applied ${bulkAction} status to ${selectedUsers.length} user(s)`,
-      type: 'success'
-    });
+    calculateStats(users);
+    showMessage(`Applied ${bulkAction} to ${selectedUsers.length} user(s)`, 'success');
   };
 
   // Submit individual attendance
   const submitIndividualAttendance = async (userId) => {
     const record = attendanceRecords[userId];
     if (!record || record.status === 'pending') {
-      setMessage({ text: 'Please set attendance status first', type: 'warning' });
+      showMessage('Please set attendance status first', 'warning');
       return;
     }
 
     if (record.status === 'absent' && !record.absenceReason.trim()) {
-      setMessage({ text: 'Please provide absence reason', type: 'warning' });
+      showMessage('Please provide absence reason', 'warning');
       return;
     }
 
@@ -751,7 +1034,6 @@ export default function AdminManualAttendance() {
       let response;
 
       if (existing && existing.recordId) {
-        // Update existing
         response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existing.recordId}`, {
           method: 'PUT',
           headers: {
@@ -761,7 +1043,6 @@ export default function AdminManualAttendance() {
           body: JSON.stringify(payload),
         });
       } else {
-        // Create new
         response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
           method: 'POST',
           headers: {
@@ -773,20 +1054,15 @@ export default function AdminManualAttendance() {
       }
 
       if (response.ok) {
-        setMessage({
-          text: `Attendance recorded for ${users.find(u => u.id === userId)?.name || 'user'}`,
-          type: 'success'
-        });
-
-        // Refresh existing attendance
+        showMessage(`Attendance recorded for ${users.find(u => u.id === userId)?.name || 'user'}`, 'success');
         fetchExistingAttendance();
       } else {
         const error = await response.json();
-        setMessage({ text: error.message || 'Failed to record attendance', type: 'error' });
+        showMessage(error.message || 'Failed to record attendance', 'error');
       }
     } catch (err) {
       console.error("Submit error:", err);
-      setMessage({ text: 'Error: ' + err.message, type: 'error' });
+      showMessage('Error: ' + err.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -795,38 +1071,29 @@ export default function AdminManualAttendance() {
   // Submit all attendance
   const submitAllAttendance = async () => {
     try {
-      // Get token first
       const token = getToken();
       if (!token) {
         navigate('/login');
         return;
       }
 
-      // First, check if any users are in "pending" status
+      // Check pending users
       const pendingUsers = Object.entries(attendanceRecords)
         .filter(([userId, record]) => record.status === 'pending')
         .map(([userId]) => users.find(u => u.id === userId)?.name || userId);
 
       if (pendingUsers.length > 0) {
-        setMessage({
-          text: `${pendingUsers.length} users still have "pending" status: ${pendingUsers.slice(0, 3).join(', ')}${pendingUsers.length > 3 ? '...' : ''}. Please set their attendance first.`,
-          type: 'warning'
-        });
+        showMessage(`${pendingUsers.length} users still have "pending" status`, 'warning');
         return;
       }
 
-      // Prepare records to submit
+      // Prepare records
       const recordsToSubmit = Object.entries(attendanceRecords)
         .filter(([userId, record]) => {
-          // Skip if already marked
           if (record.alreadyMarked) return false;
-
-          // Validate required fields based on status
           if (record.status === 'absent') {
             return record.absenceReason && record.absenceReason.trim() !== '';
           }
-
-          // For present/half-day, times are optional but status must be set
           return record.status !== 'pending';
         })
         .map(([userId, record]) => {
@@ -841,63 +1108,34 @@ export default function AdminManualAttendance() {
           };
         });
 
-      console.log('Records to submit:', recordsToSubmit);
-
       if (recordsToSubmit.length === 0) {
-        // Check why there are no records to submit
-        const totalUsers = users.length;
-        const alreadyMarkedCount = Object.values(attendanceRecords).filter(r => r.alreadyMarked).length;
-        const pendingCount = Object.values(attendanceRecords).filter(r => r.status === 'pending').length;
-
-        let messageText = '';
-        if (alreadyMarkedCount === totalUsers) {
-          messageText = 'All users already have attendance marked for today';
-        } else if (alreadyMarkedCount > 0 && pendingCount === 0) {
-          messageText = `No new records to submit. ${alreadyMarkedCount}/${totalUsers} users already marked.`;
-        } else if (pendingCount > 0) {
-          messageText = `${pendingCount} users still have "pending" status`;
-        } else {
-          messageText = 'No valid attendance records to submit';
-        }
-
-        setMessage({ text: messageText, type: 'info' });
+        showMessage('No new records to submit', 'info');
         return;
       }
 
-      // Validate absence reasons for absent records
+      // Validate absence reasons
       const missingReasons = recordsToSubmit.filter(record =>
         record.isAbsent && (!record.absenceReason || record.absenceReason.trim() === '')
       );
 
       if (missingReasons.length > 0) {
-        const userNames = missingReasons.map(record => {
-          const user = users.find(u => u.id === record.userId);
-          return user?.name || record.userId;
-        }).slice(0, 3);
-
-        setMessage({
-          text: `${missingReasons.length} absent records missing reason: ${userNames.join(', ')}${missingReasons.length > 3 ? '...' : ''}`,
-          type: 'warning'
-        });
+        showMessage(`${missingReasons.length} absent records missing reason`, 'warning');
         return;
       }
 
-      // Show confirmation dialog
+      // Confirmation
       const confirmSubmit = window.confirm(
-        `Submit attendance for ${recordsToSubmit.length} user(s) on ${selectedDate}?\n\n` +
-        `• Present: ${recordsToSubmit.filter(r => !r.isAbsent).length}\n` +
-        `• Absent: ${recordsToSubmit.filter(r => r.isAbsent).length}\n\n` +
-        `Click OK to proceed.`
+        `Submit attendance for ${recordsToSubmit.length} user(s) on ${selectedDate}?`
       );
 
       if (!confirmSubmit) {
-        setMessage({ text: 'Submission cancelled', type: 'info' });
+        showMessage('Submission cancelled', 'info');
         return;
       }
 
       setLoading(true);
 
-      // Call the bulk API endpoint
+      // Bulk API call
       const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/bulk', {
         method: 'POST',
         headers: {
@@ -910,18 +1148,10 @@ export default function AdminManualAttendance() {
       const result = await response.json();
 
       if (response.ok) {
-        setMessage({
-          text: `✅ Successfully submitted ${result.successful || recordsToSubmit.length} attendance record(s)`,
-          type: 'success'
-        });
-
-        // Refresh data to show updated status
-        await fetchExistingAttendance();
-
-        // Clear selected users
+        showMessage(`Submitted ${result.successful || recordsToSubmit.length} attendance record(s)`, 'success');
+        fetchExistingAttendance();
         setSelectedUsers([]);
 
-        // Update attendance records state
         const updatedRecords = { ...attendanceRecords };
         recordsToSubmit.forEach(record => {
           if (updatedRecords[record.userId]) {
@@ -931,32 +1161,12 @@ export default function AdminManualAttendance() {
         setAttendanceRecords(updatedRecords);
 
       } else {
-        // Handle errors from backend
-        const errorMessage = result.message || result.error || 'Failed to submit attendance';
-        const failedCount = result.failed || 0;
-
-        if (result.errors && result.errors.length > 0) {
-          const errorDetails = result.errors.slice(0, 3).map((err, idx) =>
-            `${idx + 1}. ${err.userId}: ${err.error}`
-          ).join('\n');
-
-          setMessage({
-            text: `Submitted with ${failedCount} error(s):\n${errorDetails}${result.errors.length > 3 ? '\n...' : ''}`,
-            type: 'error'
-          });
-        } else {
-          setMessage({
-            text: `${errorMessage} (${failedCount} failed)`,
-            type: 'error'
-          });
-        }
+        const errorMessage = result.message || result.error || 'Failed to submit';
+        showMessage(`${errorMessage} (${result.failed || 0} failed)`, 'error');
       }
     } catch (err) {
       console.error("Bulk submit error:", err);
-      setMessage({
-        text: `Network error: ${err.message || 'Failed to connect to server'}. Please check your connection.`,
-        type: 'error'
-      });
+      showMessage(`Network error: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -1014,7 +1224,22 @@ export default function AdminManualAttendance() {
     a.download = `attendance_${filters.startDate}_to_${filters.endDate}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+    showMessage('Export started', 'success');
   };
+
+  // Toggle user expansion
+  const toggleUserExpansion = (userId) => {
+    setExpandedUsers(prev => ({
+      ...prev,
+      [userId]: !prev[userId]
+    }));
+  };
+
+  // Pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = users.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(users.length / itemsPerPage);
 
   // Initialize on component mount
   useEffect(() => {
@@ -1035,556 +1260,749 @@ export default function AdminManualAttendance() {
     }
   }, [viewMode, filters]);
 
+  // Update stats when attendance records change
+  useEffect(() => {
+    calculateStats(users);
+  }, [attendanceRecords]);
+
   return (
-    <div className="admin-attendance-marker">
-      <div className="header">
-        <h1>Attendance Management System</h1>
-
-        <div className="header-actions">
-          <button
-            onClick={() => setViewMode('marker')}
-            className={`view-mode-btn ${viewMode === 'marker' ? 'active' : ''}`}
-          >
-            📝 Mark Attendance
-          </button>
-          <button
-            onClick={() => setViewMode('viewer')}
-            className={`view-mode-btn ${viewMode === 'viewer' ? 'active' : ''}`}
-          >
-            👁️ View All Attendance
-          </button>
-        </div>
-      </div>
-
-      {message.text && (
-        <div className={`message ${message.type}`}>
-          {message.text}
+    <div className="attendance-management">
+      {/* Toast Message */}
+      {message.visible && (
+        <div className={`toast-message ${message.type}`}>
+          <div className="toast-content">
+            {message.type === 'success' && <CheckCircle size={20} />}
+            {message.type === 'error' && <XCircle size={20} />}
+            {message.type === 'warning' && <AlertCircle size={20} />}
+            <span>{message.text}</span>
+          </div>
+          <button onClick={() => setMessage(prev => ({ ...prev, visible: false }))}>×</button>
         </div>
       )}
 
-      {viewMode === 'marker' ? (
-        <>
-          {/* Date Selection */}
-          <div className="date-section">
-            <div className="form-group">
-              <label>Select Date *</label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={handleDateChange}
-                className="date-input"
-                max={new Date().toISOString().split('T')[0]}
-              />
-              <small>Select any previous date to mark/edit attendance</small>
+      {/* Header */}
+      <header className="dashboard-header">
+        <div className="header-left">
+          <h1>Attendance Management</h1>
+          <p>Manage and track employee attendance records</p>
+        </div>
+        <div className="header-right">
+          <button className="btn-stats" onClick={() => setShowStatsModal(true)}>
+            <BarChart2 size={20} />
+            <span>Statistics</span>
+          </button>
+          {/* <button className="btn-import" onClick={() => setShowImportModal(true)}>
+            <Upload size={20} />
+            <span>Import</span>
+          </button> */}
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="dashboard-main">
+        {/* View Mode Toggle */}
+        <div className="view-mode-toggle">
+          <button
+            className={`toggle-btn ${viewMode === 'marker' ? 'active' : ''}`}
+            onClick={() => setViewMode('marker')}
+          >
+            <Calendar size={20} />
+            <span>Mark Attendance</span>
+          </button>
+          {/* <button
+            className={`toggle-btn ${viewMode === 'viewer' ? 'active' : ''}`}
+            onClick={() => setViewMode('viewer')}
+          >
+            <Eye size={20} />
+            <span>View Records</span>
+          </button> */}
+        </div>
+
+        {/* Statistics Cards */}
+        <div className="stats-cards">
+          <div className="stat-card stat-present">
+            <div className="stat-icon">
+              <CheckCircle size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>{stats.present}</h3>
+              <p>Present</p>
             </div>
           </div>
+          <div className="stat-card stat-absent">
+            <div className="stat-icon">
+              <XCircle size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>{stats.absent}</h3>
+              <p>Absent</p>
+            </div>
+          </div>
+          <div className="stat-card stat-halfday">
+            <div className="stat-icon">
+              <Clock size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>{stats.halfDay}</h3>
+              <p>Half Day</p>
+            </div>
+          </div>
+          <div className="stat-card stat-pending">
+            <div className="stat-icon">
+              <AlertCircle size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>{stats.pending}</h3>
+              <p>Pending</p>
+            </div>
+          </div>
+          <div className="stat-card stat-total">
+            <div className="stat-icon">
+              <Users size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>{stats.total}</h3>
+              <p>Total Users</p>
+            </div>
+          </div>
+        </div>
 
-          {/* Bulk Actions Panel */}
-          {/* Bulk Actions Panel */}
-          <div className="bulk-panel">
-            <h2>Bulk Actions</h2>
-            <div className="bulk-controls">
-              <div className="form-group">
-                <label>Action</label>
-                <select
-                  value={bulkAction}
-                  onChange={(e) => setBulkAction(e.target.value)}
-                  className="bulk-select"
-                  disabled={loading}
-                >
-                  <option value="present">Mark as Present</option>
-                  <option value="absent">Mark as Absent</option>
-                  <option value="half-day">Mark as Half Day</option>
-                  <option value="permission">Mark as Permission</option>
-                </select>
+        {viewMode === 'marker' ? (
+          <>
+            {/* Date Selection */}
+            <div className="date-selection-card">
+              <div className="card-header">
+                <h3>Select Date</h3>
+                <Calendar size={20} />
+              </div>
+              <div className="card-body">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={handleDateChange}
+                  className="date-input"
+                  max={new Date().toISOString().split('T')[0]}
+                />
+                <p className="date-hint">Select any previous date to mark/edit attendance</p>
+              </div>
+            </div>
+
+            {/* Bulk Actions */}
+            <div className="bulk-actions-card">
+              <div className="card-header">
+                <h3>Bulk Actions</h3>
+                <span className="selection-count">{selectedUsers.length} selected</span>
+              </div>
+              <div className="card-body">
+                <div className="bulk-form">
+                  <div className="form-group">
+                    <label>Action Type</label>
+                    <div className="action-buttons">
+                      <button
+                        className={`action-btn ${bulkAction === 'present' ? 'active' : ''}`}
+                        onClick={() => setBulkAction('present')}
+                      >
+                        <CheckCircle size={16} />
+                        <span>Present</span>
+                      </button>
+                      <button
+                        className={`action-btn ${bulkAction === 'absent' ? 'active' : ''}`}
+                        onClick={() => setBulkAction('absent')}
+                      >
+                        <XCircle size={16} />
+                        <span>Absent</span>
+                      </button>
+                      <button
+                        className={`action-btn ${bulkAction === 'half-day' ? 'active' : ''}`}
+                        onClick={() => setBulkAction('half-day')}
+                      >
+                        <Clock size={16} />
+                        <span>Half Day</span>
+                      </button>
+                      <button
+                        className={`action-btn ${bulkAction === 'permission' ? 'active' : ''}`}
+                        onClick={() => setBulkAction('permission')}
+                      >
+                        <Calendar size={16} />
+                        <span>Permission</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {bulkAction === 'absent' && (
+                    <div className="form-group">
+                      <label>Absence Reason (Required)</label>
+                      <input
+                        type="text"
+                        value={absenceReason}
+                        onChange={(e) => setAbsenceReason(e.target.value)}
+                        className="form-input"
+                        placeholder="Enter reason for absence"
+                      />
+                    </div>
+                  )}
+
+                  {bulkAction === 'permission' && (
+                    <div className="permission-fields">
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>From (HH:mm)</label>
+                          <input
+                            type="time"
+                            value={permissionFrom}
+                            onChange={(e) => setPermissionFrom(e.target.value)}
+                            className="form-input"
+                            required
+                          />
+                          <small className="input-hint">24-hour format (09:30, 14:45)</small>
+                        </div>
+                        <div className="form-group">
+                          <label>To (HH:mm)</label>
+                          <input
+                            type="time"
+                            value={permissionTo}
+                            onChange={(e) => setPermissionTo(e.target.value)}
+                            className="form-input"
+                            required
+                          />
+                          <small className="input-hint">24-hour format (12:30, 17:15)</small>
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>Reason</label>
+                        <textarea
+                          value={permissionReason}
+                          onChange={(e) => setPermissionReason(e.target.value)}
+                          className="form-input"
+                          placeholder="Enter reason for permission leave"
+                          rows="2"
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <button
+                          className="btn-apply-permission"
+                          onClick={handleBulkPermission}
+                          disabled={selectedUsers.length === 0 || loading}
+                        >
+                          {loading ? 'Processing...' : `Apply Permission to ${selectedUsers.length} User(s)`}
+                        </button>
+                        <small className="info-hint">
+                          Note: Permission time will be deducted from total working hours if check-in/check-out exists
+                        </small>
+                      </div>
+                    </div>
+                  )}
+
+
+                  <div className="bulk-controls">
+                    <button className="btn-select-all" onClick={selectAllUsers}>
+                      {selectedUsers.length === users.length ? (
+                        <>
+                          <Square size={16} />
+                          <span>Deselect All</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckSquare size={16} />
+                          <span>Select All ({users.length})</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      className="btn-apply-bulk"
+                      onClick={applyBulkAction}
+                      disabled={selectedUsers.length === 0}
+                    >
+                      Apply to Selected
+                    </button>
+                    <button
+                      className="btn-bulk-edit"
+                      onClick={handleBulkEditClick}
+                      disabled={selectedUsers.length === 0}
+                    >
+                      <Edit2 size={16} />
+                      <span>Bulk Edit</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Attendance Table */}
+            <div className="attendance-table-card">
+              <div className="card-header">
+                <h3>Attendance for {selectedDate}</h3>
+                <div className="header-actions">
+                  <button
+                    className={`btn-filter ${showFilters ? 'active' : ''}`}
+                    onClick={() => setShowFilters(!showFilters)}
+                  >
+                    <Filter size={16} />
+                    <span>Filters</span>
+                  </button>
+                  <button
+                    className="btn-submit-all"
+                    onClick={submitAllAttendance}
+                    disabled={loading}
+                  >
+                    <Save size={16} />
+                    <span>{loading ? 'Submitting...' : 'Submit All'}</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Permission fields for bulk action */}
-              {bulkAction === 'permission' && (
-                <>
-                  <div className="form-group">
-                    <label>Permission From *</label>
-                    <input
-                      type="time"
-                      value={permissionFrom}
-                      onChange={(e) => setPermissionFrom(e.target.value)}
-                      className="time-input"
-                      placeholder="HH:mm"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Permission To *</label>
-                    <input
-                      type="time"
-                      value={permissionTo}
-                      onChange={(e) => setPermissionTo(e.target.value)}
-                      className="time-input"
-                      placeholder="HH:mm"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Permission Reason *</label>
+              {showFilters && (
+                <div className="filter-section">
+                  <div className="filter-group">
+                    <label>
+                      <Search size={16} />
+                      <span>Search</span>
+                    </label>
                     <input
                       type="text"
-                      value={permissionReason}
-                      onChange={(e) => setPermissionReason(e.target.value)}
-                      className="reason-input"
-                      placeholder="Enter permission reason"
+                      placeholder="Search by name..."
+                      className="filter-input"
                     />
                   </div>
-                </>
-              )}
-
-              {/* REMOVE THIS SECTION - it's causing the error */}
-              {/* {record.status === 'permission' && (
-      <td>
-        <div className="permission-info">
-          <div>Time: {record.permissionTime}</div>
-          <div>Reason: {record.permissionReason}</div>
-        </div>
-      </td>
-    )} */}
-
-              {bulkAction === 'absent' && (
-                <div className="form-group">
-                  <label>Absence Reason *</label>
-                  <input
-                    type="text"
-                    value={absenceReason}
-                    onChange={(e) => setAbsenceReason(e.target.value)}
-                    className="reason-input"
-                    placeholder="Enter reason for all selected users"
-                    disabled={loading}
-                  />
                 </div>
               )}
 
-              <div className="bulk-buttons">
-                <button onClick={selectAllUsers} className="select-all-btn">
-                  {selectedUsers.length === users.length ? 'Deselect All' : 'Select All Users'}
-                </button>
-                <button
-                  onClick={applyBulkAction}
-                  disabled={loading || selectedUsers.length === 0}
-                  className="apply-bulk-btn"
-                >
-                  Apply to {selectedUsers.length} Selected
-                </button>
-                <button
-                  onClick={handleBulkEditClick}
-                  disabled={loading || selectedUsers.length === 0}
-                  className="bulk-edit-btn"
-                >
-                  ✏️ Bulk Edit for Selected Date
-                </button>
-              </div>
-            </div>
-
-            <div className="selection-info">
-              {selectedUsers.length} of {users.length} users selected
-            </div>
-          </div>
-
-          {/* Users Table */}
-          <div className="users-table-section">
-            <div className="table-header">
-              <h2>Mark Attendance for {selectedDate}</h2>
-              <div className="table-header-actions">
-                <button
-                  onClick={() => {
-                    // Allow editing for previous dates
-                    const today = new Date().toISOString().split('T')[0];
-                    if (selectedDate <= today) {
-                      submitAllAttendance();
-                    } else {
-                      setMessage({ text: 'Cannot submit attendance for future dates', type: 'warning' });
-                    }
-                  }}
-                  disabled={loading}
-                  className="submit-all-btn"
-                >
-                  {loading ? 'Submitting...' : 'Submit All'}
-                </button>
-              </div>
-            </div>
-
-            {usersLoading ? (
-              <div className="loading">Loading users...</div>
-            ) : users.length === 0 ? (
-              <div className="no-users">No users found</div>
-            ) : (
-              <div className="table-container">
-                <table className="attendance-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '50px' }}>
-                        <input
-                          type="checkbox"
-                          checked={selectedUsers.length === users.length}
-                          onChange={selectAllUsers}
-                          disabled={loading}
-                        />
-                      </th>
-                      <th>Employee ID</th>
-                      <th>Name</th>
-                      <th>Designation</th>
-                      <th>Department</th>
-                      <th>Status</th>
-                      <th>Check In</th>
-                      <th>Check Out</th>
-                      <th>Absence Reason</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map(user => {
-                      const record = attendanceRecords[user.id] || {
-                        status: 'pending',
-                        checkIn: '09:30',
-                        checkOut: '19:00',
-                        absenceReason: '',
-                        alreadyMarked: false
-                      };
-                      const existing = existingAttendance[user.id];
-                      const isAlreadyMarked = existing || record.alreadyMarked;
-
-                      return (
-                        <tr
-                          key={user.id}
-                          style={{
-                            backgroundColor: isAlreadyMarked ? '#e8f4f8' :
-                              record.status === 'present' ? '#d4edda' :
-                                record.status === 'absent' ? '#f8d7da' :
-                                  record.status.includes('half-day') ? '#fff3cd' : '#e2e3e5'
-                          }}
-                          className={selectedUsers.includes(user.id) ? 'selected-row' : ''}
-                        >
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={selectedUsers.includes(user.id)}
-                              onChange={() => toggleUserSelection(user.id)}
-                              disabled={loading}
-                            />
-                          </td>
-                          <td>{user.employee_id || 'N/A'}</td>
-                          <td>
-                            <div className="user-info">
-                              {user.profile_url && (
-                                <img src={user.profile_url} alt={user.name} className="user-avatar" />
-                              )}
-                              <span>
-                                {user.name}
-                                {isAlreadyMarked && <span className="already-badge">✓</span>}
-                              </span>
-                            </div>
-                          </td>
-                          <td>{user.designation || 'N/A'}</td>
-                          <td>{user.department || 'N/A'}</td>
-                          <td>
-                            <div className="status-controls">
-                              <select
-                                value={record.status}
-                                onChange={(e) => {
-                                  const updated = { ...attendanceRecords };
-                                  updated[user.id] = {
-                                    ...updated[user.id],
-                                    status: e.target.value,
-                                    alreadyMarked: false
-                                  };
-                                  setAttendanceRecords(updated);
-                                }}
-                                className="status-select"
-                                disabled={loading}
-                              >
-                                <option value="pending">-- Select --</option>
-                                <option value="present">Present</option>
-                                <option value="absent">Absent</option>
-                                <option value="half-day-morning">Half Day (Morning)</option>
-                                <option value="half-day-afternoon">Half Day (Afternoon)</option>
-                                <option value="permission">Permission</option>
-                              </select>
-
-                              {/* REMOVE THIS - it doesn't belong here */}
-                              {/* {editAttendanceData.attendanceType === 'permission' && (
-      <>
-        <div className="form-group">
-          <label>Check In Time (Optional)</label>
-          <input
-            type="time"
-            value={editAttendanceData.checkIn}
-            onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkIn: e.target.value }))}
-            className="form-control"
-          />
-        </div>
-        ... other permission fields ...
-      </>
-    )} */}
-
-                              {isAlreadyMarked && (
-                                <div className="already-text">Already Marked</div>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            {record.status === 'present' || record.status.includes('half-day') ? (
-                              <input
-                                type="time"
-                                value={record.checkIn || '09:30'}
-                                onChange={(e) => {
-                                  const updated = { ...attendanceRecords };
-                                  updated[user.id] = {
-                                    ...updated[user.id],
-                                    checkIn: e.target.value,
-                                    alreadyMarked: false
-                                  };
-                                  setAttendanceRecords(updated);
-                                }}
-                                className="time-input"
-                                disabled={loading || isAlreadyMarked}
-                              />
-                            ) : (
-                              <div className="time-display">N/A</div>
-                            )}
-                          </td>
-                          <td>
-                            {record.status === 'present' || record.status.includes('half-day') ? (
-                              <input
-                                type="time"
-                                value={record.checkOut || '19:00'}
-                                onChange={(e) => {
-                                  const updated = { ...attendanceRecords };
-                                  updated[user.id] = {
-                                    ...updated[user.id],
-                                    checkOut: e.target.value,
-                                    alreadyMarked: false
-                                  };
-                                  setAttendanceRecords(updated);
-                                }}
-                                className="time-input"
-                                disabled={loading || isAlreadyMarked}
-                              />
-                            ) : (
-                              <div className="time-display">N/A</div>
-                            )}
-                          </td>
-                          <td>
-                            {record.status === 'absent' ? (
-                              <input
-                                type="text"
-                                value={record.absenceReason || ''}
-                                onChange={(e) => {
-                                  const updated = { ...attendanceRecords };
-                                  updated[user.id] = {
-                                    ...updated[user.id],
-                                    absenceReason: e.target.value,
-                                    alreadyMarked: false
-                                  };
-                                  setAttendanceRecords(updated);
-                                }}
-                                className="reason-input"
-                                placeholder="Enter reason"
-                                disabled={loading || isAlreadyMarked}
-                              />
-                            ) : (
-                              <div className="reason-display">N/A</div>
-                            )}
-                          </td>
-                          <td>
-                            <div className="action-buttons">
-                              <button
-                                onClick={() => submitIndividualAttendance(user.id)}
-                                disabled={loading || record.status === 'pending' || isAlreadyMarked}
-                                className={`submit-btn ${isAlreadyMarked ? 'disabled-btn' : ''}`}
-                                title={isAlreadyMarked ? "Attendance already marked" : ""}
-                              >
-                                {isAlreadyMarked ? 'Marked' : 'Submit'}
-                              </button>
-                              <button
-                                onClick={() => handleEditAttendance(user)}
-                                className="edit-btn"
-                                title="Edit attendance for any date"
-                              >
-                                ✏️ Edit
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          {/* Attendance Viewer */}
-          <div className="viewer-section">
-            <div className="filter-panel">
-              <h2>Attendance Records Viewer</h2>
-              <div className="filter-controls">
-                <div className="filter-group">
-                  <label>Employee Name</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={filters.name}
-                    onChange={handleFilterChange}
-                    className="filter-input"
-                    placeholder="Search by name..."
-                  />
+              {usersLoading ? (
+                <div className="loading-state">
+                  <div className="spinner"></div>
+                  <p>Loading users...</p>
                 </div>
-
-                <div className="filter-group">
-                  <label>Start Date</label>
-                  <input
-                    type="date"
-                    name="startDate"
-                    value={filters.startDate}
-                    onChange={handleFilterChange}
-                    className="filter-input"
-                  />
+              ) : users.length === 0 ? (
+                <div className="empty-state">
+                  <Users size={48} />
+                  <h3>No Users Found</h3>
+                  <p>Add users to start managing attendance</p>
                 </div>
-
-                <div className="filter-group">
-                  <label>End Date</label>
-                  <input
-                    type="date"
-                    name="endDate"
-                    value={filters.endDate}
-                    onChange={handleFilterChange}
-                    className="filter-input"
-                  />
-                </div>
-
-                <div className="filter-group">
-                  <label>Status</label>
-                  <select
-                    name="status"
-                    value={filters.status}
-                    onChange={handleFilterChange}
-                    className="filter-select"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="present">Present</option>
-                    <option value="absent">Absent</option>
-                    <option value="half-day">Half Day</option>
-                    <option value="permission">Permission</option>
-                    <option value="checked-in">Checked In</option>
-                    <option value="pending">Pending</option>
-                  </select>
-                </div>
-
-                <div className="filter-group">
-                  <label>Department</label>
-                  <select
-                    name="department"
-                    value={filters.department}
-                    onChange={handleFilterChange}
-                    className="filter-select"
-                  >
-                    <option value="all">All Departments</option>
-                    {getDepartments().map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="filter-group">
-                  <label>Designation</label>
-                  <select
-                    name="designation"
-                    value={filters.designation}
-                    onChange={handleFilterChange}
-                    className="filter-select"
-                  >
-                    <option value="all">All Designations</option>
-                    {getDesignations().map(desig => (
-                      <option key={desig} value={desig}>{desig}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="filter-actions">
-                  <button onClick={fetchAllAttendance} className="filter-btn" disabled={attendanceLoading}>
-                    {attendanceLoading ? 'Loading...' : 'Apply Filters'}
-                  </button>
-                  <button onClick={exportToCSV} className="export-btn">
-                    Export CSV
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Attendance Data Table */}
-            <div className="data-table-section">
-              <div className="table-header">
-                <h3>Attendance Records ({allAttendanceData.length} records found)</h3>
-              </div>
-
-              {attendanceLoading ? (
-                <div className="loading">Loading attendance data...</div>
-              ) : allAttendanceData.length === 0 ? (
-                <div className="no-data">No attendance records found for the selected filters</div>
               ) : (
                 <div className="table-container">
-                  <table className="attendance-data-table">
+                  <table className="attendance-table">
                     <thead>
                       <tr>
-                        <th>Date</th>
-                        <th>Employee ID</th>
-                        <th>Name</th>
-                        <th>Department</th>
+                        <th style={{ width: '60px' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedUsers.length === users.length}
+                            onChange={selectAllUsers}
+                          />
+                        </th>
+                        <th>Employee</th>
                         <th>Designation</th>
-                        <th>Check In</th>
-                        <th>Check Out</th>
-                        <th>Total Time</th>
+                        <th>Department</th>
                         <th>Status</th>
-                        <th>Absence Reason</th>
+                        <th>Time</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {allAttendanceData.map((item, index) => {
+                      {currentItems.map(user => {
+                        const record = attendanceRecords[user.id] || {
+                          status: 'pending',
+                          checkIn: '09:30',
+                          checkOut: '19:00',
+                          absenceReason: '',
+                          alreadyMarked: false
+                        };
+                        const existing = existingAttendance[user.id];
+                        const isAlreadyMarked = existing || record.alreadyMarked;
+                        const isExpanded = expandedUsers[user.id];
+
+                        return (
+                          <React.Fragment key={user.id}>
+                            <tr className={`user-row ${isAlreadyMarked ? 'marked' : ''} ${record.status}`}>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedUsers.includes(user.id)}
+                                  onChange={() => toggleUserSelection(user.id)}
+                                />
+                              </td>
+                              <td>
+                                <div className="user-cell">
+                                  <div className="user-avatar">
+                                    {user.profile_url ? (
+                                      <img src={user.profile_url} alt={user.name} />
+                                    ) : (
+                                      <User size={20} />
+                                    )}
+                                  </div>
+                                  <div className="user-info">
+                                    <strong>{user.name}</strong>
+                                    <small>{user.employee_id || 'N/A'}</small>
+                                  </div>
+                                  <button
+                                    className="expand-btn"
+                                    onClick={() => toggleUserExpansion(user.id)}
+                                  >
+                                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                  </button>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="designation-cell">
+                                  <Briefcase size={14} />
+                                  <span>{user.designation || 'N/A'}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="department-cell">
+                                  <Building size={14} />
+                                  <span>{user.mobile || 'N/A'}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <select
+                                  value={record.status}
+                                  onChange={(e) => {
+                                    const updated = { ...attendanceRecords };
+                                    updated[user.id] = {
+                                      ...updated[user.id],
+                                      status: e.target.value,
+                                      alreadyMarked: false
+                                    };
+                                    setAttendanceRecords(updated);
+                                  }}
+                                  className="status-select"
+                                  disabled={isAlreadyMarked}
+                                >
+                                  <option value="pending">-- Select --</option>
+                                  <option value="present">Present</option>
+                                  <option value="absent">Absent</option>
+                                  <option value="half-day-morning">Half Day (AM)</option>
+                                  <option value="half-day-afternoon">Half Day (PM)</option>
+                                  <option value="permission">Permission</option>
+                                </select>
+                              </td>
+                              <td>
+                                <div className="time-controls">
+                                  <input
+                                    type="time"
+                                    value={record.checkIn || ''}
+                                    onChange={(e) => {
+                                      const updated = { ...attendanceRecords };
+                                      updated[user.id] = {
+                                        ...updated[user.id],
+                                        checkIn: e.target.value,
+                                        alreadyMarked: false
+                                      };
+                                      setAttendanceRecords(updated);
+                                    }}
+                                    className="time-input"
+                                    disabled={isAlreadyMarked || !['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status)}
+                                  />
+                                  <span className="time-separator">-</span>
+                                  <input
+                                    type="time"
+                                    value={record.checkOut || ''}
+                                    onChange={(e) => {
+                                      const updated = { ...attendanceRecords };
+                                      updated[user.id] = {
+                                        ...updated[user.id],
+                                        checkOut: e.target.value,
+                                        alreadyMarked: false
+                                      };
+                                      setAttendanceRecords(updated);
+                                    }}
+                                    className="time-input"
+                                    disabled={isAlreadyMarked || !['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status)}
+                                  />
+                                </div>
+                              </td>
+                              <td>
+                                <div className="action-buttons">
+                                  <button
+                                    className="btn-submit"
+                                    onClick={() => submitIndividualAttendance(user.id)}
+                                    disabled={isAlreadyMarked || record.status === 'pending'}
+                                    title={isAlreadyMarked ? "Already marked" : "Submit attendance"}
+                                  >
+                                    <Save size={14} />
+                                  </button>
+                                  <button
+                                    className="btn-edit"
+                                    onClick={() => handleEditAttendance(user)}
+                                    title="Edit attendance"
+                                  >
+                                    <Edit2 size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr className="details-row">
+                                <td colSpan="7">
+                                  <div className="user-details">
+                                    <div className="detail-section">
+                                      <h4>Attendance Details</h4>
+                                      <div className="detail-grid">
+                                        <div className="detail-item">
+                                          <span className="detail-label">Status:</span>
+                                          <span className={`detail-value status-${record.status}`}>
+                                            {record.status.replace('-', ' ').toUpperCase()}
+                                          </span>
+                                        </div>
+                                        {record.status === 'absent' && (
+                                          <div className="detail-item">
+                                            <span className="detail-label">Reason:</span>
+                                            <input
+                                              type="text"
+                                              value={record.absenceReason || ''}
+                                              onChange={(e) => {
+                                                const updated = { ...attendanceRecords };
+                                                updated[user.id] = {
+                                                  ...updated[user.id],
+                                                  absenceReason: e.target.value,
+                                                  alreadyMarked: false
+                                                };
+                                                setAttendanceRecords(updated);
+                                              }}
+                                              className="detail-input"
+                                              placeholder="Absence reason"
+                                            />
+                                          </div>
+                                        )}
+                                        {record.status === 'permission' && (
+                                          <div className="detail-item">
+                                            <span className="detail-label">Permission:</span>
+                                            <div className="permission-details">
+                                              <input
+                                                type="time"
+                                                value={permissionFrom}
+                                                onChange={(e) => setPermissionFrom(e.target.value)}
+                                                className="detail-input"
+                                                placeholder="HH:mm"
+                                              />
+                                              <span className="time-separator">to</span>
+                                              <input
+                                                type="time"
+                                                value={permissionTo}
+                                                onChange={(e) => setPermissionTo(e.target.value)}
+                                                className="detail-input"
+                                                placeholder="HH:mm"
+                                              />
+                                              <input
+                                                type="text"
+                                                value={permissionReason}
+                                                onChange={(e) => setPermissionReason(e.target.value)}
+                                                className="detail-input"
+                                                placeholder="Reason"
+                                              />
+                                              <button
+                                                className="btn-save-permission"
+                                                onClick={() => handlePermissionSubmit(user.id)}
+                                                disabled={!permissionFrom || !permissionTo || !permissionReason.trim()}
+                                              >
+                                                Save
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+
+
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="pagination">
+                      <button
+                        className="pagination-btn"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNumber;
+                        if (totalPages <= 5) {
+                          pageNumber = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNumber = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNumber = totalPages - 4 + i;
+                        } else {
+                          pageNumber = currentPage - 2 + i;
+                        }
+                        return (
+                          <button
+                            key={pageNumber}
+                            className={`pagination-btn ${currentPage === pageNumber ? 'active' : ''}`}
+                            onClick={() => setCurrentPage(pageNumber)}
+                          >
+                            {pageNumber}
+                          </button>
+                        );
+                      })}
+                      <button
+                        className="pagination-btn"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Viewer Mode */}
+            <div className="viewer-card">
+              <div className="card-header">
+                <h3>Attendance Records Viewer</h3>
+                <div className="header-actions">
+                  <button className="btn-export" onClick={exportToCSV}>
+                    <Download size={16} />
+                    <span>Export CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="filter-panel">
+                <div className="filter-grid">
+                  <div className="form-group">
+                    <label>Employee Name</label>
+                    <div className="input-with-icon">
+                      <Search size={16} />
+                      <input
+                        type="text"
+                        name="name"
+                        value={filters.name}
+                        onChange={handleFilterChange}
+                        placeholder="Search by name..."
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Date Range</label>
+                    <div className="date-range">
+                      <input
+                        type="date"
+                        name="startDate"
+                        value={filters.startDate}
+                        onChange={handleFilterChange}
+                      />
+                      <span>to</span>
+                      <input
+                        type="date"
+                        name="endDate"
+                        value={filters.endDate}
+                        onChange={handleFilterChange}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Status</label>
+                    <select
+                      name="status"
+                      value={filters.status}
+                      onChange={handleFilterChange}
+                    >
+                      <option value="all">All Status</option>
+                      <option value="present">Present</option>
+                      <option value="absent">Absent</option>
+                      <option value="half-day">Half Day</option>
+                      <option value="permission">Permission</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Department</label>
+                    <select
+                      name="department"
+                      value={filters.department}
+                      onChange={handleFilterChange}
+                    >
+                      <option value="all">All Departments</option>
+                      {getDepartments().map(dept => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <button className="btn-apply-filters" onClick={fetchAllAttendance}>
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {attendanceLoading ? (
+                <div className="loading-state">
+                  <div className="spinner"></div>
+                  <p>Loading attendance data...</p>
+                </div>
+              ) : allAttendanceData.length === 0 ? (
+                <div className="empty-state">
+                  <FileText size={48} />
+                  <h3>No Records Found</h3>
+                  <p>Try adjusting your filters</p>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table className="records-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Employee</th>
+                        <th>Department</th>
+                        <th>Check In</th>
+                        <th>Check Out</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allAttendanceData.slice(0, 50).map((item, index) => {
                         const user = users.find(u => u.id === item.user_id) || item.user_info;
                         return (
                           <tr key={index} className={`status-${item.status?.toLowerCase().replace(' ', '-')}`}>
                             <td>{item.date}</td>
-                            <td>{item.user_info?.employee_id || 'N/A'}</td>
                             <td>
-                              <div className="user-info">
-                                {item.user_info?.profile_url && (
-                                  <img src={item.user_info.profile_url} alt={item.user_info.name} className="user-avatar" />
-                                )}
-                                <span>{item.user_info?.name || 'Unknown'}</span>
+                              <div className="user-cell">
+                                <div className="user-avatar">
+                                  {item.user_info?.profile_url ? (
+                                    <img src={item.user_info.profile_url} alt={item.user_info.name} />
+                                  ) : (
+                                    <User size={20} />
+                                  )}
+                                </div>
+                                <div className="user-info">
+                                  <strong>{item.user_info?.name || 'Unknown'}</strong>
+                                  <small>{item.user_info?.employee_id || 'N/A'}</small>
+                                </div>
                               </div>
                             </td>
                             <td>{item.user_info?.department || 'N/A'}</td>
-                            <td>{item.user_info?.designation || 'N/A'}</td>
-                            <td>{item.check_in_ist || 'N/A'}</td>
-                            <td>{item.check_out_ist || 'N/A'}</td>
-                            <td>{item.total_time_formatted || 'N/A'}</td>
+                            <td>{item.check_in_ist || '--:--'}</td>
+                            <td>{item.check_out_ist || '--:--'}</td>
                             <td>
                               <span className={`status-badge status-${item.status?.toLowerCase().replace(' ', '-')}`}>
                                 {item.status || 'Unknown'}
                               </span>
                             </td>
-                            <td>{item.absence_reason || 'N/A'}</td>
                             <td>
                               <button
-                                onClick={() => {
-                                  if (user) {
-                                    handleEditAttendance(user, item.date);
-                                  } else {
-                                    setMessage({ text: 'User information not available', type: 'warning' });
-                                  }
-                                }}
-                                className="edit-btn"
-                                title="Edit attendance"
+                                className="btn-edit"
+                                onClick={() => user && handleEditAttendance(user, item.date)}
+                                title="Edit record"
                               >
-                                ✏️ Edit
+                                <Edit2 size={14} />
                               </button>
                             </td>
                           </tr>
@@ -1595,361 +2013,340 @@ export default function AdminManualAttendance() {
                 </div>
               )}
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </main>
 
-      {/* Edit Attendance Modal */}
-      {showEditModal && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h3>Edit Attendance for {editAttendanceData.userName}</h3>
-              <button onClick={() => setShowEditModal(false)} className="close-btn">×</button>
+ {/* Edit Attendance Modal */}
+{showEditModal && (
+  <div className="modal-overlay">
+    <div className="modal">
+      <div className="modal-header">
+        <h2>Edit Attendance</h2>
+        <button className="modal-close" onClick={() => setShowEditModal(false)}>
+          ×
+        </button>
+      </div>
+      <div className="modal-body">
+        <div className="form-group">
+          <label>Employee</label>
+          <div className="employee-display">
+            <div className="user-avatar large">
+              {editAttendanceData.userName?.charAt(0) || 'U'}
             </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>Date *</label>
-                <input
-                  type="date"
-                  value={editAttendanceData.date}
-                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, date: e.target.value }))}
-                  className="form-control"
-                  max={new Date().toISOString().split('T')[0]}
-                />
-                <small>You can select any previous date</small>
-              </div>
-
-              <div className="form-group">
-                <label>Attendance Type *</label>
-                <div className="attendance-type-selector">
-                  <button
-                    type="button"
-                    className={`type-btn ${editAttendanceData.attendanceType === 'present' ? 'active' : ''}`}
-                    onClick={() => setEditAttendanceData(prev => ({ ...prev, attendanceType: 'present' }))}
-                  >
-                    ✅ Present
-                  </button>
-                  <button
-                    type="button"
-                    className={`type-btn ${editAttendanceData.attendanceType === 'absent' ? 'active' : ''}`}
-                    onClick={() => setEditAttendanceData(prev => ({ ...prev, attendanceType: 'absent' }))}
-                  >
-                    ❌ Absent
-                  </button>
-                  <button
-                    type="button"
-                    className={`type-btn ${editAttendanceData.attendanceType === 'half-day' ? 'active' : ''}`}
-                    onClick={() => setEditAttendanceData(prev => ({ ...prev, attendanceType: 'half-day' }))}
-                  >
-                    ⏰ Half Day
-                  </button>
-                  <button
-                    type="button"
-                    className={`type-btn ${editAttendanceData.attendanceType === 'permission' ? 'active' : ''}`}
-                    onClick={() => setEditAttendanceData(prev => ({ ...prev, attendanceType: 'permission' }))}
-                  >
-                    🕒 Permission
-                  </button>
-                </div>
-              </div>
-
-              {editAttendanceData.attendanceType === 'present' && (
-                <>
-                  <div className="form-group">
-                    <label>Check In Time</label>
-                    <input
-                      type="time"
-                      value={editAttendanceData.checkIn}
-                      onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkIn: e.target.value }))}
-                      className="form-control"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Check Out Time</label>
-                    <input
-                      type="time"
-                      value={editAttendanceData.checkOut}
-                      onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkOut: e.target.value }))}
-                      className="form-control"
-                    />
-                  </div>
-                </>
-              )}
-
-              {editAttendanceData.attendanceType === 'absent' && (
-                <div className="form-group">
-                  <label>Absence Reason *</label>
-                  <input
-                    type="text"
-                    value={editAttendanceData.absenceReason}
-                    onChange={(e) => setEditAttendanceData(prev => ({ ...prev, absenceReason: e.target.value }))}
-                    className="form-control"
-                    placeholder="Enter reason for absence"
-                    required
-                  />
-                </div>
-              )}
-
-              {editAttendanceData.attendanceType === 'half-day' && (
-                <>
-                  <div className="form-group">
-                    <label>Half Day Type *</label>
-                    <div className="half-day-selector">
-                      <button
-                        type="button"
-                        className={`half-day-btn ${editAttendanceData.halfDayType === 'morning' ? 'active' : ''}`}
-                        onClick={() => setEditAttendanceData(prev => ({ ...prev, halfDayType: 'morning' }))}
-                      >
-                        ☀️ Morning Half Day
-                      </button>
-                      <button
-                        type="button"
-                        className={`half-day-btn ${editAttendanceData.halfDayType === 'afternoon' ? 'active' : ''}`}
-                        onClick={() => setEditAttendanceData(prev => ({ ...prev, halfDayType: 'afternoon' }))}
-                      >
-                        🌇 Afternoon Half Day
-                      </button>
-                    </div>
-                  </div>
-
-                  {editAttendanceData.halfDayType === 'morning' && (
-                    <>
-                      <div className="form-group">
-                        <label>Check In Time (Morning)</label>
-                        <input
-                          type="time"
-                          value={editAttendanceData.halfDayCheckIn}
-                          onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckIn: e.target.value }))}
-                          className="form-control"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Check Out Time (Lunch Time)</label>
-                        <input
-                          type="time"
-                          value={editAttendanceData.halfDayCheckOut}
-                          onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckOut: e.target.value }))}
-                          className="form-control"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {editAttendanceData.halfDayType === 'afternoon' && (
-                    <>
-                      <div className="form-group">
-                        <label>Check In Time (After Lunch)</label>
-                        <input
-                          type="time"
-                          value={editAttendanceData.halfDayCheckIn}
-                          onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckIn: e.target.value }))}
-                          className="form-control"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Check Out Time (Evening)</label>
-                        <input
-                          type="time"
-                          value={editAttendanceData.halfDayCheckOut}
-                          onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckOut: e.target.value }))}
-                          className="form-control"
-                        />
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-
-              <div className="form-group">
-                <label>Notes (Optional)</label>
-                <textarea
-                  value={editAttendanceData.notes}
-                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, notes: e.target.value }))}
-                  className="form-control"
-                  placeholder="Additional notes or remarks..."
-                  rows="2"
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditSubmit}
-                className="btn btn-primary"
-              >
-                Save Attendance
-              </button>
+            <div>
+              <h4>{editAttendanceData.userName}</h4>
+              <p>Employee ID: {users.find(u => u.id === editAttendanceData.userId)?.employee_id || 'N/A'}</p>
             </div>
           </div>
         </div>
-      )}
 
+        <div className="form-group">
+          <label>Date</label>
+          <input
+            type="date"
+            value={editAttendanceData.date}
+            onChange={(e) => setEditAttendanceData(prev => ({ ...prev, date: e.target.value }))}
+            max={new Date().toISOString().split('T')[0]}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Attendance Type</label>
+          <div className="type-selector">
+            {['present', 'absent', 'half-day', 'permission'].map(type => (
+              <button
+                key={type}
+                className={`type-option ${editAttendanceData.attendanceType === type ? 'active' : ''}`}
+                onClick={() => setEditAttendanceData(prev => ({ 
+                  ...prev, 
+                  attendanceType: type,
+                  // Set default times when selecting half-day
+                  ...(type === 'half-day' ? {
+                    halfDayType: 'morning',
+                    halfDayCheckIn: '09:30',
+                    halfDayCheckOut: '13:00'
+                  } : {}),
+                  // Set default times for present
+                  ...(type === 'present' ? {
+                    checkIn: '09:30',
+                    checkOut: '19:00'
+                  } : {})
+                }))}
+              >
+                {type === 'present' && <CheckCircle size={18} />}
+                {type === 'absent' && <XCircle size={18} />}
+                {type === 'half-day' && <Clock size={18} />}
+                {type === 'permission' && <Calendar size={18} />}
+                <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Additional fields based on type */}
+        {editAttendanceData.attendanceType === 'present' && (
+          <div className="time-fields">
+            <div className="form-row">
+              <div className="form-group">
+                <label>Check In</label>
+                <input
+                  type="time"
+                  value={editAttendanceData.checkIn}
+                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkIn: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label>Check Out</label>
+                <input
+                  type="time"
+                  value={editAttendanceData.checkOut}
+                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkOut: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {editAttendanceData.attendanceType === 'absent' && (
+          <div className="form-group">
+            <label>Absence Reason</label>
+            <input
+              type="text"
+              value={editAttendanceData.absenceReason}
+              onChange={(e) => setEditAttendanceData(prev => ({ ...prev, absenceReason: e.target.value }))}
+              placeholder="Enter reason for absence"
+            />
+          </div>
+        )}
+
+        {editAttendanceData.attendanceType === 'half-day' && (
+          <div className="halfday-fields">
+            <div className="form-group">
+              <label>Half Day Type</label>
+              <div className="halfday-type-selector">
+                <button
+                  className={`halfday-option ${editAttendanceData.halfDayType === 'morning' ? 'active' : ''}`}
+                  onClick={() => setEditAttendanceData(prev => ({ 
+                    ...prev, 
+                    halfDayType: 'morning',
+                    halfDayCheckIn: '09:30',
+                    halfDayCheckOut: '13:00'
+                  }))}
+                >
+                  <div className="halfday-icon">☀️</div>
+                  <span>Morning</span>
+                  <small>09:30 - 01:00</small>
+                </button>
+                <button
+                  className={`halfday-option ${editAttendanceData.halfDayType === 'afternoon' ? 'active' : ''}`}
+                  onClick={() => setEditAttendanceData(prev => ({ 
+                    ...prev, 
+                    halfDayType: 'afternoon',
+                    halfDayCheckIn: '13:30',
+                    halfDayCheckOut: '19:00'
+                  }))}
+                >
+                  <div className="halfday-icon">🌅</div>
+                  <span>Afternoon</span>
+                  <small>01:30 - 07:00</small>
+                </button>
+              </div>
+            </div>
+            
+            <div className="time-fields">
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Start Time</label>
+                  <input
+                    type="time"
+                    value={editAttendanceData.halfDayCheckIn}
+                    onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckIn: e.target.value }))}
+                    className="time-input"
+                  />
+                  <small className="input-hint">
+                    {editAttendanceData.halfDayType === 'morning' ? 'Morning shift start' : 'Afternoon shift start'}
+                  </small>
+                </div>
+                <div className="form-group">
+                  <label>End Time</label>
+                  <input
+                    type="time"
+                    value={editAttendanceData.halfDayCheckOut}
+                    onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckOut: e.target.value }))}
+                    className="time-input"
+                  />
+                  <small className="input-hint">
+                    {editAttendanceData.halfDayType === 'morning' ? 'Morning shift end' : 'Afternoon shift end'}
+                  </small>
+                </div>
+              </div>
+            </div>
+            
+            <div className="halfday-info">
+              <AlertCircle size={16} />
+              <small>
+                Half day attendance: {editAttendanceData.halfDayType === 'morning' ? 'Morning (4 hours)' : 'Afternoon (4 hours)'}
+              </small>
+            </div>
+          </div>
+        )}
+
+        {editAttendanceData.attendanceType === 'permission' && (
+          <div className="permission-fields">
+            <div className="form-row">
+              <div className="form-group">
+                <label>Permission From (IST)</label>
+                <input
+                  type="time"
+                  value={editAttendanceData.permissionFrom}
+                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionFrom: e.target.value }))}
+                  required
+                />
+                <small className="input-hint">Time in IST (24-hour format)</small>
+              </div>
+              <div className="form-group">
+                <label>Permission To (IST)</label>
+                <input
+                  type="time"
+                  value={editAttendanceData.permissionTo}
+                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionTo: e.target.value }))}
+                  required
+                />
+                <small className="input-hint">Time in IST (24-hour format)</small>
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Permission Reason</label>
+              <textarea
+                value={editAttendanceData.permissionReason}
+                onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionReason: e.target.value }))}
+                placeholder="Reason for permission leave"
+                rows="2"
+                required
+              />
+            </div>
+            <div className="permission-info">
+              <AlertCircle size={16} />
+              <small>
+                Permission time will be stored in IST timezone and automatically deducted from total working hours if check-in/check-out exists.
+              </small>
+            </div>
+          </div>
+        )}
+
+        <div className="form-group">
+          <label>Notes</label>
+          <textarea
+            value={editAttendanceData.notes}
+            onChange={(e) => setEditAttendanceData(prev => ({ ...prev, notes: e.target.value }))}
+            placeholder="Additional notes..."
+            rows="3"
+          />
+        </div>
+      </div>
+      <div className="modal-footer">
+        <button className="btn-secondary" onClick={() => setShowEditModal(false)}>
+          Cancel
+        </button>
+        <button className="btn-primary" onClick={handleEditSubmit}>
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* Bulk Edit Modal */}
       {showBulkEditModal && (
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
-              <h3>Bulk Edit Attendance for {selectedUsers.length} Users</h3>
-              <button onClick={() => setShowBulkEditModal(false)} className="close-btn">×</button>
+              <h2>Bulk Edit Attendance</h2>
+              <button className="modal-close" onClick={() => setShowBulkEditModal(false)}>
+                ×
+              </button>
             </div>
             <div className="modal-body">
+              <div className="bulk-info">
+                <Users size={24} />
+                <span>{selectedUsers.length} users selected</span>
+              </div>
+
               <div className="form-group">
-                <label>Date *</label>
+                <label>Apply to Date</label>
                 <input
                   type="date"
                   value={bulkEditData.date}
                   onChange={(e) => setBulkEditData(prev => ({ ...prev, date: e.target.value }))}
-                  className="form-control"
                   max={new Date().toISOString().split('T')[0]}
                 />
-                <small>Select date to apply attendance for all selected users</small>
               </div>
 
               <div className="form-group">
-                <label>Attendance Type *</label>
-                <div className="attendance-type-selector">
-                  <button
-                    type="button"
-                    className={`type-btn ${bulkEditData.attendanceType === 'present' ? 'active' : ''}`}
-                    onClick={() => setBulkEditData(prev => ({ ...prev, attendanceType: 'present' }))}
-                  >
-                    ✅ Present
-                  </button>
-                  <button
-                    type="button"
-                    className={`type-btn ${bulkEditData.attendanceType === 'absent' ? 'active' : ''}`}
-                    onClick={() => setBulkEditData(prev => ({ ...prev, attendanceType: 'absent' }))}
-                  >
-                    ❌ Absent
-                  </button>
-                  <button
-                    type="button"
-                    className={`type-btn ${bulkEditData.attendanceType === 'half-day' ? 'active' : ''}`}
-                    onClick={() => setBulkEditData(prev => ({ ...prev, attendanceType: 'half-day' }))}
-                  >
-                    ⏰ Half Day
-                  </button>
-                  <button
-                    type="button"
-                    className={`type-btn ${bulkEditData.attendanceType === 'permission' ? 'active' : ''}`}
-                    onClick={() => setBulkEditData(prev => ({ ...prev, attendanceType: 'permission' }))}
-                  >
-                    🕒 Permission
-                  </button>
+                <label>Attendance Type</label>
+                <div className="type-selector">
+                  {['present', 'absent', 'half-day', 'permission'].map(type => (
+                    <button
+                      key={type}
+                      className={`type-option ${bulkEditData.attendanceType === type ? 'active' : ''}`}
+                      onClick={() => setBulkEditData(prev => ({ ...prev, attendanceType: type }))}
+                    >
+                      {type === 'present' && <CheckCircle size={18} />}
+                      {type === 'absent' && <XCircle size={18} />}
+                      {type === 'half-day' && <Clock size={18} />}
+                      {type === 'permission' && <Calendar size={18} />}
+                      <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {bulkEditData.attendanceType === 'present' && (
-                <>
-                  <div className="form-group">
-                    <label>Check In Time</label>
-                    <input
-                      type="time"
-                      value={bulkEditData.checkIn}
-                      onChange={(e) => setBulkEditData(prev => ({ ...prev, checkIn: e.target.value }))}
-                      className="form-control"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Check Out Time</label>
-                    <input
-                      type="time"
-                      value={bulkEditData.checkOut}
-                      onChange={(e) => setBulkEditData(prev => ({ ...prev, checkOut: e.target.value }))}
-                      className="form-control"
-                    />
-                  </div>
-                </>
-              )}
-
+              {/* Additional fields based on type */}
               {bulkEditData.attendanceType === 'absent' && (
                 <div className="form-group">
-                  <label>Absence Reason *</label>
+                  <label>Absence Reason</label>
                   <input
                     type="text"
                     value={bulkEditData.absenceReason}
                     onChange={(e) => setBulkEditData(prev => ({ ...prev, absenceReason: e.target.value }))}
-                    className="form-control"
-                    placeholder="Enter reason for absence"
-                    required
+                    placeholder="Reason for all selected users"
                   />
                 </div>
               )}
 
-              {bulkEditData.attendanceType === 'half-day' && (
-                <>
-                  <div className="form-group">
-                    <label>Half Day Type *</label>
-                    <div className="half-day-selector">
-                      <button
-                        type="button"
-                        className={`half-day-btn ${bulkEditData.halfDayType === 'morning' ? 'active' : ''}`}
-                        onClick={() => setBulkEditData(prev => ({ ...prev, halfDayType: 'morning' }))}
-                      >
-                        ☀️ Morning Half Day
-                      </button>
-                      <button
-                        type="button"
-                        className={`half-day-btn ${bulkEditData.halfDayType === 'afternoon' ? 'active' : ''}`}
-                        onClick={() => setBulkEditData(prev => ({ ...prev, halfDayType: 'afternoon' }))}
-                      >
-                        🌇 Afternoon Half Day
-                      </button>
+              {bulkEditData.attendanceType === 'permission' && (
+                <div className="permission-fields">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Permission From (IST)</label>
+                      <input
+                        type="time"
+                        value={bulkEditData.permissionFrom}
+                        onChange={(e) => setBulkEditData(prev => ({ ...prev, permissionFrom: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Permission To (IST)</label>
+                      <input
+                        type="time"
+                        value={bulkEditData.permissionTo}
+                        onChange={(e) => setBulkEditData(prev => ({ ...prev, permissionTo: e.target.value }))}
+                        required
+                      />
                     </div>
                   </div>
-
-                  {bulkEditData.halfDayType === 'morning' && (
-                    <>
-                      <div className="form-group">
-                        <label>Check In Time (Morning)</label>
-                        <input
-                          type="time"
-                          value={bulkEditData.halfDayCheckIn}
-                          onChange={(e) => setBulkEditData(prev => ({ ...prev, halfDayCheckIn: e.target.value }))}
-                          className="form-control"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Check Out Time (Lunch Time)</label>
-                        <input
-                          type="time"
-                          value={bulkEditData.halfDayCheckOut}
-                          onChange={(e) => setBulkEditData(prev => ({ ...prev, halfDayCheckOut: e.target.value }))}
-                          className="form-control"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {bulkEditData.halfDayType === 'afternoon' && (
-                    <>
-                      <div className="form-group">
-                        <label>Check In Time (After Lunch)</label>
-                        <input
-                          type="time"
-                          value={bulkEditData.halfDayCheckIn}
-                          onChange={(e) => setBulkEditData(prev => ({ ...prev, halfDayCheckIn: e.target.value }))}
-                          className="form-control"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Check Out Time (Evening)</label>
-                        <input
-                          type="time"
-                          value={bulkEditData.halfDayCheckOut}
-                          onChange={(e) => setBulkEditData(prev => ({ ...prev, halfDayCheckOut: e.target.value }))}
-                          className="form-control"
-                        />
-                      </div>
-                    </>
-                  )}
-                </>
+                  <div className="form-group">
+                    <label>Permission Reason</label>
+                    <textarea
+                      value={bulkEditData.permissionReason}
+                      onChange={(e) => setBulkEditData(prev => ({ ...prev, permissionReason: e.target.value }))}
+                      placeholder="Reason for permission leave"
+                      rows="2"
+                      required
+                    />
+                  </div>
+                </div>
               )}
 
               <div className="form-group">
@@ -1957,23 +2354,16 @@ export default function AdminManualAttendance() {
                 <textarea
                   value={bulkEditData.notes}
                   onChange={(e) => setBulkEditData(prev => ({ ...prev, notes: e.target.value }))}
-                  className="form-control"
-                  placeholder="Additional notes or remarks..."
-                  rows="2"
+                  placeholder="Additional notes for all users..."
+                  rows="3"
                 />
               </div>
             </div>
             <div className="modal-footer">
-              <button
-                onClick={() => setShowBulkEditModal(false)}
-                className="btn btn-secondary"
-              >
+              <button className="btn-secondary" onClick={() => setShowBulkEditModal(false)}>
                 Cancel
               </button>
-              <button
-                onClick={handleBulkEditSubmit}
-                className="btn btn-primary"
-              >
+              <button className="btn-primary" onClick={handleBulkEditSubmit}>
                 Apply to {selectedUsers.length} Users
               </button>
             </div>
@@ -1981,39 +2371,18 @@ export default function AdminManualAttendance() {
         </div>
       )}
 
-      {/* Instructions */}
-      <div className="instructions">
-        <h3>How to use:</h3>
-        <div className="instructions-grid">
-          <div className="instruction-card">
-            <h4>📝 Mark Attendance</h4>
-            <ul>
-              <li>Select any date (past dates only)</li>
-              <li>Mark users as Present/Absent/Half-day</li>
-              <li>Use bulk actions for multiple users</li>
-              <li>Click "Edit" button for individual user to mark attendance for any date</li>
-            </ul>
-          </div>
-          <div className="instruction-card">
-            <h4>👁️ View & Edit Attendance</h4>
-            <ul>
-              <li>Filter records by date range, name, status</li>
-              <li>Export data to CSV</li>
-              <li>Click "Edit" button to modify any attendance record</li>
-              <li>Edit attendance for any date in the modal</li>
-            </ul>
-          </div>
-          <div className="instruction-card">
-            <h4>✏️ Edit Features</h4>
-            <ul>
-              <li>Single user edit: Click edit button for any user</li>
-              <li>Bulk edit: Select multiple users and click "Bulk Edit"</li>
-              <li>Edit for any previous date</li>
-              <li>Full support for Present, Absent, Half-day types</li>
-            </ul>
-          </div>
+      {/* Footer */}
+      <footer className="dashboard-footer">
+        <p>© {new Date().getFullYear()} Attendance Management System</p>
+        <div className="footer-links">
+          <span>•</span>
+          <a href="#help">Help</a>
+          <span>•</span>
+          <a href="#docs">Documentation</a>
+          <span>•</span>
+          <a href="#support">Support</a>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }
