@@ -604,14 +604,29 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      // Validation for permission
-      if (editAttendanceData.attendanceType === 'permission') {
+      // Validation based on attendance type
+      if (editAttendanceData.attendanceType === 'absent') {
+        if (!editAttendanceData.absenceReason.trim()) {
+          showMessage('Please provide absence reason', 'warning');
+          return;
+        }
+      } else if (editAttendanceData.attendanceType === 'permission') {
         if (!editAttendanceData.permissionFrom || !editAttendanceData.permissionTo) {
           showMessage('Please provide permission start and end times', 'warning');
           return;
         }
         if (!editAttendanceData.permissionReason.trim()) {
           showMessage('Please provide permission reason', 'warning');
+          return;
+        }
+      } else if (editAttendanceData.attendanceType === 'present') {
+        if (!editAttendanceData.checkIn || !editAttendanceData.checkOut) {
+          showMessage('Please provide check-in and check-out times', 'warning');
+          return;
+        }
+      } else if (editAttendanceData.attendanceType === 'half-day') {
+        if (!editAttendanceData.halfDayCheckIn || !editAttendanceData.halfDayCheckOut) {
+          showMessage('Please provide half-day start and end times', 'warning');
           return;
         }
       }
@@ -632,8 +647,8 @@ export default function AdminManualAttendance() {
 
       switch (editAttendanceData.attendanceType) {
         case 'present':
-          payload.checkIn = editAttendanceData.checkIn || null;
-          payload.checkOut = editAttendanceData.checkOut || null;
+          payload.checkIn = editAttendanceData.checkIn;
+          payload.checkOut = editAttendanceData.checkOut;
           payload.isAbsent = false;
           payload.absenceReason = null;
           payload.halfDayType = null;
@@ -643,9 +658,9 @@ export default function AdminManualAttendance() {
 
         case 'absent':
           payload.isAbsent = true;
-          payload.absenceReason = editAttendanceData.absenceReason;
-          payload.checkIn = null;
-          payload.checkOut = null;
+          payload.absenceReason = editAttendanceData.absenceReason.trim();
+          payload.checkIn = null; // No time needed for absent
+          payload.checkOut = null; // No time needed for absent
           payload.halfDayType = null;
           payload.permissionTime = null;
           payload.permissionReason = null;
@@ -654,23 +669,18 @@ export default function AdminManualAttendance() {
         case 'half-day':
           payload.isAbsent = false;
           payload.halfDayType = editAttendanceData.halfDayType;
-          if (editAttendanceData.halfDayType === 'morning') {
-            payload.checkIn = editAttendanceData.halfDayCheckIn || '09:30';
-            payload.checkOut = editAttendanceData.halfDayCheckOut || '13:00';
-          } else {
-            payload.checkIn = editAttendanceData.halfDayCheckIn || '14:00';
-            payload.checkOut = editAttendanceData.halfDayCheckOut || '19:00';
-          }
+          payload.checkIn = editAttendanceData.halfDayCheckIn;
+          payload.checkOut = editAttendanceData.halfDayCheckOut;
           payload.permissionTime = null;
           payload.permissionReason = null;
           break;
 
         case 'permission':
           payload.isAbsent = false;
-          payload.checkIn = editAttendanceData.checkIn || null;
-          payload.checkOut = editAttendanceData.checkOut || null;
+          payload.checkIn = null; // Not required for permission
+          payload.checkOut = null; // Not required for permission
           payload.permissionTime = `${editAttendanceData.permissionFrom}-${editAttendanceData.permissionTo}`;
-          payload.permissionReason = editAttendanceData.permissionReason;
+          payload.permissionReason = editAttendanceData.permissionReason.trim();
           payload.halfDayType = null;
           break;
       }
@@ -721,9 +731,7 @@ export default function AdminManualAttendance() {
               date: editAttendanceData.date,
               permissionFrom: editAttendanceData.permissionFrom,
               permissionTo: editAttendanceData.permissionTo,
-              reason: editAttendanceData.permissionReason,
-              checkIn: editAttendanceData.checkIn || null,
-              checkOut: editAttendanceData.checkOut || null,
+              reason: editAttendanceData.permissionReason.trim(),
               notes: editAttendanceData.notes || ''
             }),
           });
@@ -1010,9 +1018,27 @@ export default function AdminManualAttendance() {
       return;
     }
 
-    if (record.status === 'absent' && !record.absenceReason.trim()) {
-      showMessage('Please provide absence reason', 'warning');
-      return;
+    // Handle different statuses
+    if (record.status === 'absent') {
+      if (!record.absenceReason || !record.absenceReason.trim()) {
+        showMessage('Please provide absence reason', 'warning');
+        return;
+      }
+    } else if (record.status === 'permission') {
+      if (!record.permissionTime) {
+        showMessage('Please set permission time', 'warning');
+        return;
+      }
+      if (!record.permissionReason || !record.permissionReason.trim()) {
+        showMessage('Please provide permission reason', 'warning');
+        return;
+      }
+    } else if (record.status === 'present' || record.status.includes('half-day')) {
+      // For present/half-day, validate time inputs
+      if (!record.checkIn || !record.checkOut) {
+        showMessage('Please provide check-in and check-out times', 'warning');
+        return;
+      }
     }
 
     try {
@@ -1020,14 +1046,55 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const payload = {
+      // Prepare payload based on status
+      let payload = {
         userId: userId,
         date: selectedDate,
-        isAbsent: record.status === 'absent',
-        absenceReason: record.status === 'absent' ? record.absenceReason.trim() : null,
-        checkIn: record.status === 'present' ? record.checkIn : null,
-        checkOut: record.status === 'present' ? record.checkOut : null
+        manualEntry: true
       };
+
+      switch (record.status) {
+        case 'present':
+          payload.checkIn = record.checkIn;
+          payload.checkOut = record.checkOut;
+          payload.isAbsent = false;
+          payload.absenceReason = null;
+          payload.halfDayType = null;
+          payload.permissionTime = null;
+          payload.permissionReason = null;
+          break;
+
+        case 'absent':
+          payload.isAbsent = true;
+          payload.absenceReason = record.absenceReason.trim();
+          payload.checkIn = null;
+          payload.checkOut = null;
+          payload.halfDayType = null;
+          payload.permissionTime = null;
+          payload.permissionReason = null;
+          break;
+
+        case 'half-day-morning':
+        case 'half-day-afternoon':
+          payload.isAbsent = false;
+          payload.halfDayType = record.status.includes('morning') ? 'morning' : 'afternoon';
+          payload.checkIn = record.checkIn;
+          payload.checkOut = record.checkOut;
+          payload.absenceReason = null;
+          payload.permissionTime = null;
+          payload.permissionReason = null;
+          break;
+
+        case 'permission':
+          payload.isAbsent = false;
+          payload.permissionTime = record.permissionTime;
+          payload.permissionReason = record.permissionReason.trim();
+          payload.checkIn = null; // Not required for permission
+          payload.checkOut = null; // Not required for permission
+          payload.absenceReason = null;
+          payload.halfDayType = null;
+          break;
+      }
 
       // Check if record exists
       const existing = existingAttendance[userId];
@@ -1043,14 +1110,33 @@ export default function AdminManualAttendance() {
           body: JSON.stringify(payload),
         });
       } else {
-        response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(payload),
-        });
+        // For permission, use permission endpoint
+        if (record.status === 'permission') {
+          const [permissionFrom, permissionTo] = record.permissionTime.split('-');
+          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              userId: userId,
+              date: selectedDate,
+              permissionFrom: permissionFrom?.trim(),
+              permissionTo: permissionTo?.trim(),
+              reason: record.permissionReason.trim()
+            }),
+          });
+        } else {
+          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload),
+          });
+        }
       }
 
       if (response.ok) {
@@ -1680,37 +1766,88 @@ export default function AdminManualAttendance() {
                               </td>
                               <td>
                                 <div className="time-controls">
-                                  <input
-                                    type="time"
-                                    value={record.checkIn || ''}
-                                    onChange={(e) => {
-                                      const updated = { ...attendanceRecords };
-                                      updated[user.id] = {
-                                        ...updated[user.id],
-                                        checkIn: e.target.value,
-                                        alreadyMarked: false
-                                      };
-                                      setAttendanceRecords(updated);
-                                    }}
-                                    className="time-input"
-                                    disabled={isAlreadyMarked || !['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status)}
-                                  />
-                                  <span className="time-separator">-</span>
-                                  <input
-                                    type="time"
-                                    value={record.checkOut || ''}
-                                    onChange={(e) => {
-                                      const updated = { ...attendanceRecords };
-                                      updated[user.id] = {
-                                        ...updated[user.id],
-                                        checkOut: e.target.value,
-                                        alreadyMarked: false
-                                      };
-                                      setAttendanceRecords(updated);
-                                    }}
-                                    className="time-input"
-                                    disabled={isAlreadyMarked || !['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status)}
-                                  />
+                                  {['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status) ? (
+                                    <>
+                                      <input
+                                        type="time"
+                                        value={record.checkIn || ''}
+                                        onChange={(e) => {
+                                          const updated = { ...attendanceRecords };
+                                          updated[user.id] = {
+                                            ...updated[user.id],
+                                            checkIn: e.target.value,
+                                            alreadyMarked: false
+                                          };
+                                          setAttendanceRecords(updated);
+                                        }}
+                                        className="time-input"
+                                        disabled={isAlreadyMarked}
+                                      />
+                                      <span className="time-separator">-</span>
+                                      <input
+                                        type="time"
+                                        value={record.checkOut || ''}
+                                        onChange={(e) => {
+                                          const updated = { ...attendanceRecords };
+                                          updated[user.id] = {
+                                            ...updated[user.id],
+                                            checkOut: e.target.value,
+                                            alreadyMarked: false
+                                          };
+                                          setAttendanceRecords(updated);
+                                        }}
+                                        className="time-input"
+                                        disabled={isAlreadyMarked}
+                                      />
+                                    </>
+                                  ) : record.status === 'absent' ? (
+                                    <input
+                                      type="text"
+                                      value={record.absenceReason || ''}
+                                      onChange={(e) => {
+                                        const updated = { ...attendanceRecords };
+                                        updated[user.id] = {
+                                          ...updated[user.id],
+                                          absenceReason: e.target.value,
+                                          alreadyMarked: false
+                                        };
+                                        setAttendanceRecords(updated);
+                                      }}
+                                      className="reason-input"
+                                      placeholder="Absence reason"
+                                      disabled={isAlreadyMarked}
+                                    />
+                                  ) : record.status === 'permission' ? (
+                                    <div className="permission-inputs">
+                                      <input
+                                        type="time"
+                                        value={permissionFrom}
+                                        onChange={(e) => setPermissionFrom(e.target.value)}
+                                        className="time-input"
+                                        placeholder="From"
+                                        disabled={isAlreadyMarked}
+                                      />
+                                      <span className="time-separator">to</span>
+                                      <input
+                                        type="time"
+                                        value={permissionTo}
+                                        onChange={(e) => setPermissionTo(e.target.value)}
+                                        className="time-input"
+                                        placeholder="To"
+                                        disabled={isAlreadyMarked}
+                                      />
+                                      <input
+                                        type="text"
+                                        value={permissionReason}
+                                        onChange={(e) => setPermissionReason(e.target.value)}
+                                        className="reason-input"
+                                        placeholder="Permission reason"
+                                        disabled={isAlreadyMarked}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="no-time">--:--</span>
+                                  )}
                                 </div>
                               </td>
                               <td>
@@ -1794,7 +1931,18 @@ export default function AdminManualAttendance() {
                                               />
                                               <button
                                                 className="btn-save-permission"
-                                                onClick={() => handlePermissionSubmit(user.id)}
+                                                onClick={() => {
+                                                  // Update the record with permission data
+                                                  const updated = { ...attendanceRecords };
+                                                  updated[user.id] = {
+                                                    ...updated[user.id],
+                                                    permissionTime: `${permissionFrom}-${permissionTo}`,
+                                                    permissionReason: permissionReason,
+                                                    alreadyMarked: false
+                                                  };
+                                                  setAttendanceRecords(updated);
+                                                  handlePermissionSubmit(user.id);
+                                                }}
                                                 disabled={!permissionFrom || !permissionTo || !permissionReason.trim()}
                                               >
                                                 Save
@@ -2017,245 +2165,245 @@ export default function AdminManualAttendance() {
         )}
       </main>
 
- {/* Edit Attendance Modal */}
-{showEditModal && (
-  <div className="modal-overlay">
-    <div className="modal">
-      <div className="modal-header">
-        <h2>Edit Attendance</h2>
-        <button className="modal-close" onClick={() => setShowEditModal(false)}>
-          ×
-        </button>
-      </div>
-      <div className="modal-body">
-        <div className="form-group">
-          <label>Employee</label>
-          <div className="employee-display">
-            <div className="user-avatar large">
-              {editAttendanceData.userName?.charAt(0) || 'U'}
-            </div>
-            <div>
-              <h4>{editAttendanceData.userName}</h4>
-              <p>Employee ID: {users.find(u => u.id === editAttendanceData.userId)?.employee_id || 'N/A'}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label>Date</label>
-          <input
-            type="date"
-            value={editAttendanceData.date}
-            onChange={(e) => setEditAttendanceData(prev => ({ ...prev, date: e.target.value }))}
-            max={new Date().toISOString().split('T')[0]}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Attendance Type</label>
-          <div className="type-selector">
-            {['present', 'absent', 'half-day', 'permission'].map(type => (
-              <button
-                key={type}
-                className={`type-option ${editAttendanceData.attendanceType === type ? 'active' : ''}`}
-                onClick={() => setEditAttendanceData(prev => ({ 
-                  ...prev, 
-                  attendanceType: type,
-                  // Set default times when selecting half-day
-                  ...(type === 'half-day' ? {
-                    halfDayType: 'morning',
-                    halfDayCheckIn: '09:30',
-                    halfDayCheckOut: '13:00'
-                  } : {}),
-                  // Set default times for present
-                  ...(type === 'present' ? {
-                    checkIn: '09:30',
-                    checkOut: '19:00'
-                  } : {})
-                }))}
-              >
-                {type === 'present' && <CheckCircle size={18} />}
-                {type === 'absent' && <XCircle size={18} />}
-                {type === 'half-day' && <Clock size={18} />}
-                {type === 'permission' && <Calendar size={18} />}
-                <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+      {/* Edit Attendance Modal */}
+      {showEditModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h2>Edit Attendance</h2>
+              <button className="modal-close" onClick={() => setShowEditModal(false)}>
+                ×
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Additional fields based on type */}
-        {editAttendanceData.attendanceType === 'present' && (
-          <div className="time-fields">
-            <div className="form-row">
-              <div className="form-group">
-                <label>Check In</label>
-                <input
-                  type="time"
-                  value={editAttendanceData.checkIn}
-                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkIn: e.target.value }))}
-                />
-              </div>
-              <div className="form-group">
-                <label>Check Out</label>
-                <input
-                  type="time"
-                  value={editAttendanceData.checkOut}
-                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkOut: e.target.value }))}
-                />
-              </div>
             </div>
-          </div>
-        )}
-
-        {editAttendanceData.attendanceType === 'absent' && (
-          <div className="form-group">
-            <label>Absence Reason</label>
-            <input
-              type="text"
-              value={editAttendanceData.absenceReason}
-              onChange={(e) => setEditAttendanceData(prev => ({ ...prev, absenceReason: e.target.value }))}
-              placeholder="Enter reason for absence"
-            />
-          </div>
-        )}
-
-        {editAttendanceData.attendanceType === 'half-day' && (
-          <div className="halfday-fields">
-            <div className="form-group">
-              <label>Half Day Type</label>
-              <div className="halfday-type-selector">
-                <button
-                  className={`halfday-option ${editAttendanceData.halfDayType === 'morning' ? 'active' : ''}`}
-                  onClick={() => setEditAttendanceData(prev => ({ 
-                    ...prev, 
-                    halfDayType: 'morning',
-                    halfDayCheckIn: '09:30',
-                    halfDayCheckOut: '13:00'
-                  }))}
-                >
-                  <div className="halfday-icon">☀️</div>
-                  <span>Morning</span>
-                  <small>09:30 - 01:00</small>
-                </button>
-                <button
-                  className={`halfday-option ${editAttendanceData.halfDayType === 'afternoon' ? 'active' : ''}`}
-                  onClick={() => setEditAttendanceData(prev => ({ 
-                    ...prev, 
-                    halfDayType: 'afternoon',
-                    halfDayCheckIn: '13:30',
-                    halfDayCheckOut: '19:00'
-                  }))}
-                >
-                  <div className="halfday-icon">🌅</div>
-                  <span>Afternoon</span>
-                  <small>01:30 - 07:00</small>
-                </button>
-              </div>
-            </div>
-            
-            <div className="time-fields">
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Start Time</label>
-                  <input
-                    type="time"
-                    value={editAttendanceData.halfDayCheckIn}
-                    onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckIn: e.target.value }))}
-                    className="time-input"
-                  />
-                  <small className="input-hint">
-                    {editAttendanceData.halfDayType === 'morning' ? 'Morning shift start' : 'Afternoon shift start'}
-                  </small>
-                </div>
-                <div className="form-group">
-                  <label>End Time</label>
-                  <input
-                    type="time"
-                    value={editAttendanceData.halfDayCheckOut}
-                    onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckOut: e.target.value }))}
-                    className="time-input"
-                  />
-                  <small className="input-hint">
-                    {editAttendanceData.halfDayType === 'morning' ? 'Morning shift end' : 'Afternoon shift end'}
-                  </small>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Employee</label>
+                <div className="employee-display">
+                  <div className="user-avatar large">
+                    {editAttendanceData.userName?.charAt(0) || 'U'}
+                  </div>
+                  <div>
+                    <h4>{editAttendanceData.userName}</h4>
+                    <p>Employee ID: {users.find(u => u.id === editAttendanceData.userId)?.employee_id || 'N/A'}</p>
+                  </div>
                 </div>
               </div>
+
+              <div className="form-group">
+                <label>Date</label>
+                <input
+                  type="date"
+                  value={editAttendanceData.date}
+                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, date: e.target.value }))}
+                  max={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Attendance Type</label>
+                <div className="type-selector">
+                  {['present', 'absent', 'half-day', 'permission'].map(type => (
+                    <button
+                      key={type}
+                      className={`type-option ${editAttendanceData.attendanceType === type ? 'active' : ''}`}
+                      onClick={() => setEditAttendanceData(prev => ({
+                        ...prev,
+                        attendanceType: type,
+                        // Set default times when selecting half-day
+                        ...(type === 'half-day' ? {
+                          halfDayType: 'morning',
+                          halfDayCheckIn: '09:30',
+                          halfDayCheckOut: '13:00'
+                        } : {}),
+                        // Set default times for present
+                        ...(type === 'present' ? {
+                          checkIn: '09:30',
+                          checkOut: '19:00'
+                        } : {})
+                      }))}
+                    >
+                      {type === 'present' && <CheckCircle size={18} />}
+                      {type === 'absent' && <XCircle size={18} />}
+                      {type === 'half-day' && <Clock size={18} />}
+                      {type === 'permission' && <Calendar size={18} />}
+                      <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Additional fields based on type */}
+              {editAttendanceData.attendanceType === 'present' && (
+                <div className="time-fields">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Check In</label>
+                      <input
+                        type="time"
+                        value={editAttendanceData.checkIn}
+                        onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkIn: e.target.value }))}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Check Out</label>
+                      <input
+                        type="time"
+                        value={editAttendanceData.checkOut}
+                        onChange={(e) => setEditAttendanceData(prev => ({ ...prev, checkOut: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {editAttendanceData.attendanceType === 'absent' && (
+                <div className="form-group">
+                  <label>Absence Reason</label>
+                  <input
+                    type="text"
+                    value={editAttendanceData.absenceReason}
+                    onChange={(e) => setEditAttendanceData(prev => ({ ...prev, absenceReason: e.target.value }))}
+                    placeholder="Enter reason for absence"
+                  />
+                </div>
+              )}
+
+              {editAttendanceData.attendanceType === 'half-day' && (
+                <div className="halfday-fields">
+                  <div className="form-group">
+                    <label>Half Day Type</label>
+                    <div className="halfday-type-selector">
+                      <button
+                        className={`halfday-option ${editAttendanceData.halfDayType === 'morning' ? 'active' : ''}`}
+                        onClick={() => setEditAttendanceData(prev => ({
+                          ...prev,
+                          halfDayType: 'morning',
+                          halfDayCheckIn: '09:30',
+                          halfDayCheckOut: '13:00'
+                        }))}
+                      >
+                        <div className="halfday-icon">☀️</div>
+                        <span>Morning</span>
+                        <small>09:30 - 01:00</small>
+                      </button>
+                      <button
+                        className={`halfday-option ${editAttendanceData.halfDayType === 'afternoon' ? 'active' : ''}`}
+                        onClick={() => setEditAttendanceData(prev => ({
+                          ...prev,
+                          halfDayType: 'afternoon',
+                          halfDayCheckIn: '13:30',
+                          halfDayCheckOut: '19:00'
+                        }))}
+                      >
+                        <div className="halfday-icon">🌅</div>
+                        <span>Afternoon</span>
+                        <small>01:30 - 07:00</small>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="time-fields">
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Start Time</label>
+                        <input
+                          type="time"
+                          value={editAttendanceData.halfDayCheckIn}
+                          onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckIn: e.target.value }))}
+                          className="time-input"
+                        />
+                        <small className="input-hint">
+                          {editAttendanceData.halfDayType === 'morning' ? 'Morning shift start' : 'Afternoon shift start'}
+                        </small>
+                      </div>
+                      <div className="form-group">
+                        <label>End Time</label>
+                        <input
+                          type="time"
+                          value={editAttendanceData.halfDayCheckOut}
+                          onChange={(e) => setEditAttendanceData(prev => ({ ...prev, halfDayCheckOut: e.target.value }))}
+                          className="time-input"
+                        />
+                        <small className="input-hint">
+                          {editAttendanceData.halfDayType === 'morning' ? 'Morning shift end' : 'Afternoon shift end'}
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="halfday-info">
+                    <AlertCircle size={16} />
+                    <small>
+                      Half day attendance: {editAttendanceData.halfDayType === 'morning' ? 'Morning (4 hours)' : 'Afternoon (4 hours)'}
+                    </small>
+                  </div>
+                </div>
+              )}
+
+              {editAttendanceData.attendanceType === 'permission' && (
+                <div className="permission-fields">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Permission From (IST)</label>
+                      <input
+                        type="time"
+                        value={editAttendanceData.permissionFrom}
+                        onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionFrom: e.target.value }))}
+                        required
+                      />
+                      <small className="input-hint">Time in IST (24-hour format)</small>
+                    </div>
+                    <div className="form-group">
+                      <label>Permission To (IST)</label>
+                      <input
+                        type="time"
+                        value={editAttendanceData.permissionTo}
+                        onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionTo: e.target.value }))}
+                        required
+                      />
+                      <small className="input-hint">Time in IST (24-hour format)</small>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Permission Reason</label>
+                    <textarea
+                      value={editAttendanceData.permissionReason}
+                      onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionReason: e.target.value }))}
+                      placeholder="Reason for permission leave"
+                      rows="2"
+                      required
+                    />
+                  </div>
+                  <div className="permission-info">
+                    <AlertCircle size={16} />
+                    <small>
+                      Permission time will be stored in IST timezone and automatically deducted from total working hours if check-in/check-out exists.
+                    </small>
+                  </div>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>Notes</label>
+                <textarea
+                  value={editAttendanceData.notes}
+                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Additional notes..."
+                  rows="3"
+                />
+              </div>
             </div>
-            
-            <div className="halfday-info">
-              <AlertCircle size={16} />
-              <small>
-                Half day attendance: {editAttendanceData.halfDayType === 'morning' ? 'Morning (4 hours)' : 'Afternoon (4 hours)'}
-              </small>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={handleEditSubmit}>
+                Save Changes
+              </button>
             </div>
           </div>
-        )}
-
-        {editAttendanceData.attendanceType === 'permission' && (
-          <div className="permission-fields">
-            <div className="form-row">
-              <div className="form-group">
-                <label>Permission From (IST)</label>
-                <input
-                  type="time"
-                  value={editAttendanceData.permissionFrom}
-                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionFrom: e.target.value }))}
-                  required
-                />
-                <small className="input-hint">Time in IST (24-hour format)</small>
-              </div>
-              <div className="form-group">
-                <label>Permission To (IST)</label>
-                <input
-                  type="time"
-                  value={editAttendanceData.permissionTo}
-                  onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionTo: e.target.value }))}
-                  required
-                />
-                <small className="input-hint">Time in IST (24-hour format)</small>
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Permission Reason</label>
-              <textarea
-                value={editAttendanceData.permissionReason}
-                onChange={(e) => setEditAttendanceData(prev => ({ ...prev, permissionReason: e.target.value }))}
-                placeholder="Reason for permission leave"
-                rows="2"
-                required
-              />
-            </div>
-            <div className="permission-info">
-              <AlertCircle size={16} />
-              <small>
-                Permission time will be stored in IST timezone and automatically deducted from total working hours if check-in/check-out exists.
-              </small>
-            </div>
-          </div>
-        )}
-
-        <div className="form-group">
-          <label>Notes</label>
-          <textarea
-            value={editAttendanceData.notes}
-            onChange={(e) => setEditAttendanceData(prev => ({ ...prev, notes: e.target.value }))}
-            placeholder="Additional notes..."
-            rows="3"
-          />
         </div>
-      </div>
-      <div className="modal-footer">
-        <button className="btn-secondary" onClick={() => setShowEditModal(false)}>
-          Cancel
-        </button>
-        <button className="btn-primary" onClick={handleEditSubmit}>
-          Save Changes
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      )}
       {/* Bulk Edit Modal */}
       {showBulkEditModal && (
         <div className="modal-overlay">

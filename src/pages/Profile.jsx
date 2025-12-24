@@ -22,13 +22,24 @@ const Profile = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  // Styles object
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Styles object with responsive properties
   const styles = {
     wrapper: {
       minHeight: "100vh",
       background: "#f8fafc",
-      padding: "24px",
+      padding: isMobile ? "16px" : "24px",
       display: "flex",
       alignItems: "flex-start",
       justifyContent: "center",
@@ -37,50 +48,58 @@ const Profile = () => {
       width: "100%",
       maxWidth: "1200px",
       background: "#ffffff",
-      borderRadius: "12px",
-      boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+      borderRadius: isMobile ? "8px" : "12px",
+      boxShadow: isMobile 
+        ? "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.05)"
+        : "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
       overflow: "hidden",
       border: "1px solid #e2e8f0",
     },
     header: {
-      padding: "32px 40px 24px",
+      padding: isMobile ? "20px 16px 16px" : "32px 40px 24px",
       borderBottom: "1px solid #e2e8f0",
       background: "#ffffff",
+      position: "relative",
     },
     headerTitle: {
       color: "#1e293b",
-      fontSize: "28px",
+      fontSize: isMobile ? "22px" : "28px",
       fontWeight: "600",
-      margin: "0 0 8px 0",
+      margin: isMobile ? "0 0 8px 0" : "0 0 8px 0",
       letterSpacing: "-0.5px",
+      paddingRight: isMobile ? "80px" : "0",
     },
     headerSubtitle: {
       color: "#64748b",
-      fontSize: "14px",
+      fontSize: isMobile ? "13px" : "14px",
       margin: "0",
       fontWeight: "400",
     },
     actionTabs: {
       display: "flex",
+      flexDirection: isMobile ? "column" : "row",
       gap: "8px",
       background: "#f8fafc",
-      padding: "8px",
-      borderRadius: "8px",
+      padding: isMobile ? "12px" : "8px",
+      borderRadius: isMobile ? "8px" : "8px",
       border: "1px solid #e2e8f0",
-      margin: "20px",
+      margin: isMobile ? "12px" : "20px",
+      overflowX: isMobile ? "auto" : "visible",
+      flexWrap: isMobile ? "wrap" : "nowrap",
     },
     actionTab: {
-      flex: "1",
-      padding: "10px 16px",
+      flex: isMobile ? "1 0 calc(50% - 8px)" : "1",
+      padding: isMobile ? "12px 8px" : "10px 16px",
       background: "transparent",
       border: "none",
       borderRadius: "6px",
-      fontSize: "13px",
+      fontSize: isMobile ? "12px" : "13px",
       fontWeight: "500",
       color: "#64748b",
       cursor: "pointer",
       transition: "all 0.2s ease",
       textAlign: "center",
+      minWidth: isMobile ? "100px" : "auto",
     },
     actionTabActive: {
       background: "#2563eb",
@@ -91,27 +110,29 @@ const Profile = () => {
       cursor: "not-allowed",
     },
     managementContainer: {
-      display: "grid",
-      gridTemplateColumns: "1fr 2fr",
-      gap: "24px",
-      padding: "20px",
+      display: isMobile ? "flex" : "grid",
+      flexDirection: isMobile ? "column" : "row",
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr",
+      gap: isMobile ? "16px" : "24px",
+      padding: isMobile ? "12px" : "20px",
     },
     userListPanel: {
       background: "#ffffff",
-      borderRadius: "12px",
+      borderRadius: isMobile ? "8px" : "12px",
       border: "1px solid #e2e8f0",
       overflow: "hidden",
       display: "flex",
       flexDirection: "column",
+      minHeight: isMobile ? "300px" : "auto",
     },
     panelHeader: {
-      padding: "20px",
+      padding: isMobile ? "16px" : "20px",
       borderBottom: "1px solid #e2e8f0",
       background: "#f8fafc",
     },
     panelTitle: {
       color: "#1e293b",
-      fontSize: "18px",
+      fontSize: isMobile ? "16px" : "18px",
       fontWeight: "600",
       margin: "0 0 16px 0",
     },
@@ -120,10 +141,10 @@ const Profile = () => {
     },
     searchInput: {
       width: "100%",
-      padding: "10px 14px 10px 40px",
+      padding: isMobile ? "10px 14px 10px 38px" : "10px 14px 10px 40px",
       borderRadius: "8px",
       border: "1.5px solid #e2e8f0",
-      fontSize: "14px",
+      fontSize: isMobile ? "13px" : "14px",
       color: "#1e293b",
       background: "#ffffff",
     },
@@ -133,18 +154,19 @@ const Profile = () => {
       top: "50%",
       transform: "translateY(-50%)",
       color: "#94a3b8",
+      fontSize: isMobile ? "14px" : "16px",
     },
     userList: {
       flex: "1",
       overflowY: "auto",
-      padding: "20px",
-      maxHeight: "500px",
+      padding: isMobile ? "12px" : "20px",
+      maxHeight: isMobile ? "400px" : "500px",
     },
     userCard: {
       background: "#ffffff",
       border: "1px solid #e2e8f0",
       borderRadius: "8px",
-      padding: "16px",
+      padding: isMobile ? "12px" : "16px",
       marginBottom: "12px",
       cursor: "pointer",
       transition: "all 0.2s ease",
@@ -156,12 +178,13 @@ const Profile = () => {
     userCardHeader: {
       display: "flex",
       alignItems: "center",
-      gap: "12px",
-      marginBottom: "12px",
+      gap: isMobile ? "8px" : "12px",
+      marginBottom: isMobile ? "8px" : "12px",
     },
     userAvatar: {
-      width: "40px",
-      height: "40px",
+      width: isMobile ? "36px" : "40px",
+      height: isMobile ? "36px" : "40px",
+      minWidth: isMobile ? "36px" : "40px",
       borderRadius: "50%",
       background: "#2563eb",
       color: "white",
@@ -169,30 +192,39 @@ const Profile = () => {
       alignItems: "center",
       justifyContent: "center",
       fontWeight: "600",
-      fontSize: "16px",
+      fontSize: isMobile ? "14px" : "16px",
       overflow: "hidden",
     },
     userInfo: {
       flex: "1",
+      minWidth: 0,
+      overflow: "hidden",
     },
     userName: {
       color: "#1e293b",
-      fontSize: "14px",
+      fontSize: isMobile ? "13px" : "14px",
       fontWeight: "600",
-      margin: "0 0 4px 0",
+      margin: "0 0 2px 0",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
     },
     userEmail: {
       color: "#64748b",
-      fontSize: "12px",
+      fontSize: isMobile ? "11px" : "12px",
       margin: "0",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
     },
     roleBadge: {
-      padding: "4px 10px",
+      padding: isMobile ? "3px 8px" : "4px 10px",
       borderRadius: "20px",
-      fontSize: "11px",
+      fontSize: isMobile ? "10px" : "11px",
       fontWeight: "600",
       textTransform: "uppercase",
       letterSpacing: "0.5px",
+      whiteSpace: "nowrap",
     },
     roleBadgeAdmin: {
       background: "rgba(37, 99, 235, 0.1)",
@@ -204,36 +236,36 @@ const Profile = () => {
     },
     formPanel: {
       background: "#ffffff",
-      borderRadius: "12px",
+      borderRadius: isMobile ? "8px" : "12px",
       border: "1px solid #e2e8f0",
       overflow: "hidden",
     },
     formHeader: {
-      padding: "20px",
+      padding: isMobile ? "16px" : "20px",
       borderBottom: "1px solid #e2e8f0",
       background: "#f8fafc",
     },
     formContainer: {
-      padding: "20px",
+      padding: isMobile ? "16px" : "20px",
     },
     formSection: {
-      marginBottom: "32px",
-      paddingBottom: "24px",
+      marginBottom: isMobile ? "24px" : "32px",
+      paddingBottom: isMobile ? "16px" : "24px",
       borderBottom: "1px solid #e2e8f0",
     },
     sectionTitle: {
       color: "#1e293b",
-      fontSize: "16px",
+      fontSize: isMobile ? "15px" : "16px",
       fontWeight: "600",
-      margin: "0 0 20px 0",
+      margin: "0 0 16px 0",
       display: "flex",
       alignItems: "center",
     },
     formGrid: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: "24px",
-      marginBottom: "24px",
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+      gap: isMobile ? "16px" : "24px",
+      marginBottom: isMobile ? "16px" : "24px",
     },
     formGroup: {
       display: "flex",
@@ -241,20 +273,22 @@ const Profile = () => {
     },
     label: {
       color: "#1e293b",
-      fontSize: "14px",
+      fontSize: isMobile ? "13px" : "14px",
       fontWeight: "500",
-      marginBottom: "8px",
+      marginBottom: isMobile ? "6px" : "8px",
       display: "flex",
       alignItems: "center",
     },
     input: {
-      padding: "10px 14px",
+      padding: isMobile ? "10px 12px" : "10px 14px",
       borderRadius: "8px",
       border: "1.5px solid #e2e8f0",
-      fontSize: "14px",
+      fontSize: isMobile ? "13px" : "14px",
       color: "#1e293b",
       background: "#ffffff",
       transition: "all 0.2s ease",
+      width: "100%",
+      boxSizing: "border-box",
     },
     inputFocus: {
       outline: "none",
@@ -262,35 +296,38 @@ const Profile = () => {
       boxShadow: "0 0 0 3px rgba(37, 99, 235, 0.1)",
     },
     select: {
-      padding: "10px 14px",
+      padding: isMobile ? "10px 12px" : "10px 14px",
+      paddingRight: isMobile ? "36px" : "40px",
       borderRadius: "8px",
       border: "1.5px solid #e2e8f0",
-      fontSize: "14px",
+      fontSize: isMobile ? "13px" : "14px",
       color: "#1e293b",
       background: "#ffffff",
       cursor: "pointer",
       appearance: "none",
       backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E\")",
       backgroundRepeat: "no-repeat",
-      backgroundPosition: "right 14px center",
+      backgroundPosition: isMobile ? "right 12px center" : "right 14px center",
       backgroundSize: "16px",
-      paddingRight: "40px",
+      width: "100%",
+      boxSizing: "border-box",
     },
     submitButton: {
       width: "100%",
-      padding: "14px 28px",
+      padding: isMobile ? "12px 20px" : "14px 28px",
       background: "#2563eb",
       color: "white",
       border: "none",
       borderRadius: "8px",
-      fontSize: "15px",
+      fontSize: isMobile ? "14px" : "15px",
       fontWeight: "600",
       cursor: "pointer",
       transition: "all 0.2s ease",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      gap: "10px",
+      gap: "8px",
+      boxSizing: "border-box",
     },
     submitButtonHover: {
       background: "#1d4ed8",
@@ -303,10 +340,10 @@ const Profile = () => {
       opacity: "0.7",
     },
     message: {
-      marginTop: "24px",
-      padding: "16px",
+      marginTop: isMobile ? "16px" : "24px",
+      padding: isMobile ? "12px" : "16px",
       borderRadius: "8px",
-      fontSize: "14px",
+      fontSize: isMobile ? "13px" : "14px",
       fontWeight: "500",
       textAlign: "center",
       animation: "slideIn 0.3s ease",
@@ -332,30 +369,32 @@ const Profile = () => {
       alignItems: "center",
       justifyContent: "center",
       zIndex: "1000",
+      padding: isMobile ? "16px" : "20px",
     },
     modalContainer: {
       background: "#ffffff",
-      borderRadius: "12px",
-      width: "90%",
+      borderRadius: isMobile ? "8px" : "12px",
+      width: "100%",
       maxWidth: "400px",
       boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
     },
     modalHeader: {
-      padding: "20px",
+      padding: isMobile ? "16px" : "20px",
       borderBottom: "1px solid #e2e8f0",
     },
     modalBody: {
-      padding: "20px",
+      padding: isMobile ? "16px" : "20px",
     },
     modalActions: {
-      padding: "20px",
+      padding: isMobile ? "16px" : "20px",
       borderTop: "1px solid #e2e8f0",
       display: "flex",
-      gap: "12px",
+      gap: isMobile ? "8px" : "12px",
+      flexDirection: isMobile ? "column" : "row",
     },
     modalCancel: {
       flex: "1",
-      padding: "12px",
+      padding: isMobile ? "10px" : "12px",
       background: "transparent",
       color: "#64748b",
       border: "1.5px solid #e2e8f0",
@@ -363,10 +402,11 @@ const Profile = () => {
       fontWeight: "600",
       cursor: "pointer",
       transition: "all 0.2s ease",
+      fontSize: isMobile ? "13px" : "14px",
     },
     modalDelete: {
       flex: "1",
-      padding: "12px",
+      padding: isMobile ? "10px" : "12px",
       background: "#dc2626",
       color: "white",
       border: "none",
@@ -374,32 +414,108 @@ const Profile = () => {
       fontWeight: "600",
       cursor: "pointer",
       transition: "all 0.2s ease",
+      fontSize: isMobile ? "13px" : "14px",
     },
-
-    // Add this to your styles:
-backButton: {
-  position: "absolute",
-  top: "20px",
-  left: "20px",
-  background: "#f8fafc",
-  border: "1.5px solid #e2e8f0",
-  color: "#64748b",
-  fontSize: "14px",
-  fontWeight: "500",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  gap: "6px",
-  padding: "8px 16px",
-  borderRadius: "8px",
-  transition: "all 0.2s ease",
-},
-backButtonHover: {
-  background: "#ffffff",
-  borderColor: "#2563eb",
-  color: "#2563eb",
-  boxShadow: "0 2px 4px rgba(37, 99, 235, 0.1)",
-},
+    backButton: {
+      position: isMobile ? "relative" : "absolute",
+      top: isMobile ? "0" : "20px",
+      left: isMobile ? "0" : "20px",
+      right: isMobile ? "auto" : "auto",
+      bottom: isMobile ? "auto" : "auto",
+      background: "#f8fafc",
+      border: "1.5px solid #e2e8f0",
+      color: "#64748b",
+      fontSize: isMobile ? "13px" : "14px",
+      fontWeight: "500",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: isMobile ? "8px 12px" : "8px 16px",
+      borderRadius: "8px",
+      transition: "all 0.2s ease",
+      marginBottom: isMobile ? "16px" : "0",
+      width: isMobile ? "100%" : "auto",
+      justifyContent: "center",
+    },
+    backButtonHover: {
+      background: "#ffffff",
+      borderColor: "#2563eb",
+      color: "#2563eb",
+      boxShadow: "0 2px 4px rgba(37, 99, 235, 0.1)",
+    },
+    buttonRow: {
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      gap: isMobile ? "12px" : "12px",
+      width: "100%",
+    },
+    resetButton: {
+      flex: "1",
+      padding: isMobile ? "12px 20px" : "14px 28px",
+      background: "transparent",
+      color: "#64748b",
+      border: "1.5px solid #e2e8f0",
+      borderRadius: "8px",
+      fontSize: isMobile ? "14px" : "15px",
+      fontWeight: "600",
+      cursor: "pointer",
+      transition: "all 0.2s ease",
+      boxSizing: "border-box",
+      width: isMobile ? "100%" : "auto",
+    },
+    userDetails: {
+      borderTop: "1px solid #e2e8f0",
+      paddingTop: isMobile ? "8px" : "12px",
+    },
+    detailText: {
+      color: "#64748b",
+      fontSize: isMobile ? "11px" : "12px",
+      margin: "4px 0",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    },
+    fileInputLabel: {
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      padding: isMobile ? "12px" : "16px",
+      border: "2px dashed #e2e8f0",
+      borderRadius: "8px",
+      background: "#f8fafc",
+      cursor: "pointer",
+      transition: "all 0.2s ease",
+      fontSize: isMobile ? "13px" : "14px",
+    },
+    fileInputText: {
+      flex: "1",
+      color: "#64748b",
+      fontSize: isMobile ? "13px" : "14px",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+    },
+    fileButton: {
+      padding: isMobile ? "6px 16px" : "8px 20px",
+      background: "#2563eb",
+      color: "white",
+      borderRadius: "6px",
+      fontSize: isMobile ? "12px" : "13px",
+      fontWeight: "500",
+      transition: "all 0.2s ease",
+      whiteSpace: "nowrap",
+    },
+    selectedFile: {
+      padding: isMobile ? "8px 12px" : "12px 16px",
+      background: "rgba(5, 150, 105, 0.05)",
+      border: "1px solid rgba(5, 150, 105, 0.2)",
+      borderRadius: "8px",
+      color: "#059669",
+      fontSize: isMobile ? "12px" : "13px",
+      fontWeight: "500",
+      marginTop: "12px",
+    },
     // Add keyframes for animations
     keyframes: `
       @keyframes slideIn {
@@ -411,6 +527,10 @@ backButtonHover: {
           opacity: 1;
           transform: translateY(0);
         }
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
       }
     `,
   };
@@ -588,12 +708,14 @@ backButtonHover: {
     <div style={styles.wrapper}>
       <div style={styles.container}>
         <div style={styles.header}>
-             <button
-          onClick={() => window.history.back()}
-          style={styles.backButton}
-        >
-          ← Back
-        </button>
+          <button
+            onClick={() => window.history.back()}
+            style={styles.backButton}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#ffffff"}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#f8fafc"}
+          >
+            ← Back
+          </button>
           <h2 style={styles.headerTitle}>User Management System</h2>
           <p style={styles.headerSubtitle}>
             Create, update, or delete user accounts
@@ -682,7 +804,15 @@ backButtonHover: {
                     <div style={styles.userCardHeader}>
                       <div style={styles.userAvatar}>
                         {user.profile_url ? (
-                          <img src={user.profile_url} alt={user.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <img 
+                            src={user.profile_url} 
+                            alt={user.name} 
+                            style={{ 
+                              width: "100%", 
+                              height: "100%", 
+                              objectFit: "cover" 
+                            }} 
+                          />
                         ) : (
                           <span>{user.name?.charAt(0) || "U"}</span>
                         )}
@@ -698,11 +828,11 @@ backButtonHover: {
                         {user.role}
                       </span>
                     </div>
-                    <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}>
-                      <p style={{ color: "#64748b", fontSize: "12px", margin: "4px 0" }}>
+                    <div style={styles.userDetails}>
+                      <p style={styles.detailText}>
                         <strong>ID:</strong> {user.employee_id}
                       </p>
-                      <p style={{ color: "#64748b", fontSize: "12px", margin: "4px 0" }}>
+                      <p style={styles.detailText}>
                         <strong>Designation:</strong> {user.designation || "-"}
                       </p>
                     </div>
@@ -728,7 +858,14 @@ backButtonHover: {
                   borderLeft: "3px solid #2563eb",
                   marginTop: "8px"
                 }}>
-                  <p style={{ color: "#64748b", fontSize: "13px", margin: "0" }}>
+                  <p style={{ 
+                    color: "#64748b", 
+                    fontSize: isMobile ? "12px" : "13px", 
+                    margin: "0",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis"
+                  }}>
                     Editing: <strong>{selectedUser.name}</strong> ({selectedUser.employee_id})
                   </p>
                 </div>
@@ -799,11 +936,20 @@ backButtonHover: {
                           disabled={action === "update"}
                           style={{
                             ...styles.input,
-                            ...(action === "update" ? { background: "#f8fafc", color: "#94a3b8", cursor: "not-allowed" } : {})
+                            ...(action === "update" ? { 
+                              background: "#f8fafc", 
+                              color: "#94a3b8", 
+                              cursor: "not-allowed" 
+                            } : {})
                           }}
                         />
                         {action === "update" && (
-                          <small style={{ color: "#94a3b8", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                          <small style={{ 
+                            color: "#94a3b8", 
+                            fontSize: "12px", 
+                            marginTop: "4px", 
+                            display: "block" 
+                          }}>
                             Email cannot be changed
                           </small>
                         )}
@@ -840,7 +986,7 @@ backButtonHover: {
                       </div>
                     </div>
                     
-                    <div style={{ ...styles.formGroup, gridColumn: "span 2" }}>
+                    <div style={{ ...styles.formGroup, ...(isMobile ? {} : { gridColumn: "span 2" }) }}>
                       <label htmlFor="ien" style={styles.label}>Emergency Contact (IEN)</label>
                       <input
                         id="ien"
@@ -889,7 +1035,12 @@ backButtonHover: {
                           style={styles.input}
                         />
                         {action === "update" && (
-                          <small style={{ color: "#94a3b8", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                          <small style={{ 
+                            color: "#94a3b8", 
+                            fontSize: "12px", 
+                            marginTop: "4px", 
+                            display: "block" 
+                          }}>
                             Leave blank to keep current password
                           </small>
                         )}
@@ -900,12 +1051,12 @@ backButtonHover: {
                   <div style={styles.formSection}>
                     <h3 style={styles.sectionTitle}>Profile Picture</h3>
                     <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px", border: "2px dashed #e2e8f0", borderRadius: "8px", background: "#f8fafc", cursor: "pointer", transition: "all 0.2s ease" }}>
-                        <span style={{ fontSize: "20px", color: "#64748b" }}>📁</span>
-                        <span style={{ flex: "1", color: "#64748b", fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <label style={styles.fileInputLabel}>
+                        <span style={{ fontSize: isMobile ? "18px" : "20px", color: "#64748b" }}>📁</span>
+                        <span style={styles.fileInputText}>
                           {profile ? profile.name : "Choose profile picture"}
                         </span>
-                        <span style={{ padding: "8px 20px", background: "#2563eb", color: "white", borderRadius: "6px", fontSize: "13px", fontWeight: "500", transition: "all 0.2s ease" }}>
+                        <span style={styles.fileButton}>
                           Browse
                         </span>
                         <input
@@ -916,7 +1067,7 @@ backButtonHover: {
                         />
                       </label>
                       {profile && (
-                        <div style={{ padding: "12px 16px", background: "rgba(5, 150, 105, 0.05)", border: "1px solid rgba(5, 150, 105, 0.2)", borderRadius: "8px", color: "#059669", fontSize: "13px", fontWeight: "500", marginTop: "12px" }}>
+                        <div style={styles.selectedFile}>
                           Selected: {profile.name}
                         </div>
                       )}
@@ -928,11 +1079,19 @@ backButtonHover: {
               {action === "partial" && (
                 <div style={styles.formSection}>
                   <h3 style={styles.sectionTitle}>Partial Update</h3>
-                  <p style={{ color: "#64748b", fontSize: "13px", margin: "-8px 0 16px 0" }}>
+                  <p style={{ 
+                    color: "#64748b", 
+                    fontSize: isMobile ? "12px" : "13px", 
+                    margin: isMobile ? "-4px 0 12px 0" : "-8px 0 16px 0" 
+                  }}>
                     Update only the fields you want to change
                   </p>
                   
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                  <div style={{ 
+                    display: "grid", 
+                    gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", 
+                    gap: isMobile ? "16px" : "20px" 
+                  }}>
                     <div style={styles.formGroup}>
                       <label htmlFor="name" style={styles.label}>Full Name</label>
                       <input
@@ -984,7 +1143,7 @@ backButtonHover: {
                       </select>
                     </div>
                     
-                    <div style={{ ...styles.formGroup, gridColumn: "span 2" }}>
+                    <div style={{ ...styles.formGroup, ...(isMobile ? {} : { gridColumn: "span 2" }) }}>
                       <label htmlFor="password" style={styles.label}>New Password</label>
                       <input
                         id="password"
@@ -1000,8 +1159,12 @@ backButtonHover: {
                 </div>
               )}
 
-              <div style={{ marginTop: "40px", paddingTop: "24px", borderTop: "1px solid #e2e8f0" }}>
-                <div style={{ display: "flex", gap: "12px" }}>
+              <div style={{ 
+                marginTop: isMobile ? "32px" : "40px", 
+                paddingTop: isMobile ? "20px" : "24px", 
+                borderTop: "1px solid #e2e8f0" 
+              }}>
+                <div style={styles.buttonRow}>
                   <button 
                     type="submit" 
                     disabled={loading}
@@ -1012,7 +1175,14 @@ backButtonHover: {
                   >
                     {loading ? (
                       <>
-                        <span style={{ width: "18px", height: "18px", border: "2px solid rgba(255, 255, 255, 0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }}></span>
+                        <span style={{ 
+                          width: "18px", 
+                          height: "18px", 
+                          border: "2px solid rgba(255, 255, 255, 0.3)", 
+                          borderTopColor: "white", 
+                          borderRadius: "50%", 
+                          animation: "spin 0.8s linear infinite" 
+                        }}></span>
                         {action === "create" && "Creating User..."}
                         {action === "update" && "Updating User..."}
                         {action === "partial" && "Updating User..."}
@@ -1029,18 +1199,7 @@ backButtonHover: {
                   <button 
                     type="button" 
                     onClick={resetForm}
-                    style={{
-                      flex: "1",
-                      padding: "14px 28px",
-                      background: "transparent",
-                      color: "#64748b",
-                      border: "1.5px solid #e2e8f0",
-                      borderRadius: "8px",
-                      fontSize: "15px",
-                      fontWeight: "600",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                    }}
+                    style={styles.resetButton}
                     disabled={loading}
                   >
                     Reset Form
@@ -1068,10 +1227,18 @@ backButtonHover: {
                 <h3 style={styles.panelTitle}>Confirm Deletion</h3>
               </div>
               <div style={styles.modalBody}>
-                <p style={{ color: "#64748b", margin: "0 0 12px 0" }}>
+                <p style={{ color: "#64748b", margin: "0 0 12px 0", fontSize: isMobile ? "13px" : "14px" }}>
                   Are you sure you want to delete user <strong>{userToDelete.name}</strong>?
                 </p>
-                <p style={{ color: "#dc2626", fontSize: "13px", background: "rgba(220, 38, 38, 0.05)", padding: "12px", borderRadius: "6px", borderLeft: "3px solid #dc2626", margin: "0" }}>
+                <p style={{ 
+                  color: "#dc2626", 
+                  fontSize: isMobile ? "12px" : "13px", 
+                  background: "rgba(220, 38, 38, 0.05)", 
+                  padding: "12px", 
+                  borderRadius: "6px", 
+                  borderLeft: "3px solid #dc2626", 
+                  margin: "0" 
+                }}>
                   ⚠️ This action cannot be undone. All user data will be permanently deleted.
                 </p>
               </div>
