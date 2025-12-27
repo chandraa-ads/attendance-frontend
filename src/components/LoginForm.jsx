@@ -28,7 +28,7 @@ export default function LoginForm() {
 
   // Call your backend login endpoint
   const backendLogin = async (email, password, role) => {
-    const res = await fetch(`https://attendance-backend-d4vi.onrender.comauth/login/${role}`, {
+    const res = await fetch(`https://attendance-backend-d4vi.onrender.com/auth/login/${role}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),

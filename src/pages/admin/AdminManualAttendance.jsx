@@ -92,7 +92,7 @@ export default function AdminManualAttendance() {
       }
 
       // Send request to permission endpoint
-      const response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
+      const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -195,7 +195,7 @@ export default function AdminManualAttendance() {
             });
           }
 
-          const response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
+          const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -351,7 +351,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch('https://attendance-backend-d4vi.onrender.comauth/users', {
+      const res = await fetch('https://attendance-backend-d4vi.onrender.com/auth/users', {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -424,7 +424,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/all?date=${selectedDate}`, {
+      const res = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${selectedDate}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -511,7 +511,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      let url = 'https://attendance-backend-d4vi.onrender.comattendance/filter?';
+      let url = 'https://attendance-backend-d4vi.onrender.com/attendance/filter?';
       const params = [];
 
       if (filters.startDate) params.push(`startDate=${filters.startDate}`);
@@ -692,7 +692,7 @@ export default function AdminManualAttendance() {
 
       // Check if record already exists
       let existingRecordId = null;
-      const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/all?date=${editAttendanceData.date}`, {
+      const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${editAttendanceData.date}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -709,7 +709,7 @@ export default function AdminManualAttendance() {
       let response;
       if (existingRecordId) {
         // Update existing record
-        response = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/update/${existingRecordId}`, {
+        response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existingRecordId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -720,7 +720,7 @@ export default function AdminManualAttendance() {
       } else {
         // Create new record
         if (editAttendanceData.attendanceType === 'permission') {
-          response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
+          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -736,7 +736,7 @@ export default function AdminManualAttendance() {
             }),
           });
         } else {
-          response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/manual', {
+          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -849,7 +849,7 @@ export default function AdminManualAttendance() {
 
           // Check if record exists
           let existingRecordId = null;
-          const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/all?date=${bulkEditData.date}`, {
+          const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${bulkEditData.date}`, {
             headers: {
               'Authorization': `Bearer ${token}`
             },
@@ -865,7 +865,7 @@ export default function AdminManualAttendance() {
 
           let response;
           if (existingRecordId) {
-            response = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/update/${existingRecordId}`, {
+            response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existingRecordId}`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -875,7 +875,7 @@ export default function AdminManualAttendance() {
             });
           } else {
             if (bulkEditData.attendanceType === 'permission') {
-              response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
+              response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -893,7 +893,7 @@ export default function AdminManualAttendance() {
                 }),
               });
             } else {
-              response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/manual', {
+              response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -1101,7 +1101,7 @@ export default function AdminManualAttendance() {
       let response;
 
       if (existing && existing.recordId) {
-        response = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/update/${existing.recordId}`, {
+        response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existing.recordId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -1113,7 +1113,7 @@ export default function AdminManualAttendance() {
         // For permission, use permission endpoint
         if (record.status === 'permission') {
           const [permissionFrom, permissionTo] = record.permissionTime.split('-');
-          response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
+          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1128,7 +1128,7 @@ export default function AdminManualAttendance() {
             }),
           });
         } else {
-          response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/manual', {
+          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1222,7 +1222,7 @@ export default function AdminManualAttendance() {
       setLoading(true);
 
       // Bulk API call
-      const response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/bulk', {
+      const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/bulk', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

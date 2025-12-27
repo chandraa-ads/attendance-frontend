@@ -71,7 +71,7 @@ export default function AdminAllAttendance() {
       setLoading(true);
       const token = getToken();
 
-      const res = await fetch('https://attendance-backend-d4vi.onrender.comattendance/all', {
+      const res = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/all', {
         headers: token ? {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -100,7 +100,7 @@ export default function AdminAllAttendance() {
       setLoading(true);
       const token = getToken();
 
-      const url = `https://attendance-backend-d4vi.onrender.comattendance/filter?startDate=${startDate}&endDate=${endDate}`;
+      const url = `https://attendance-backend-d4vi.onrender.com/attendance/filter?startDate=${startDate}&endDate=${endDate}`;
       const res = await fetch(url, {
         headers: token ? {
           Authorization: `Bearer ${token}`,
@@ -158,7 +158,7 @@ export default function AdminAllAttendance() {
 
       // Test the endpoint first with a simple GET request
       try {
-        const testResponse = await fetch('https://attendance-backend-d4vi.onrender.comattendance/test', {
+        const testResponse = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/test', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -182,7 +182,7 @@ export default function AdminAllAttendance() {
       }
 
       const response = await fetch(
-        'https://attendance-backend-d4vi.onrender.comattendance/generate-pdf',
+        'https://attendance-backend-d4vi.onrender.com/attendance/generate-pdf',
         {
           method: 'POST',
           headers: {
