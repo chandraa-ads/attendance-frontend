@@ -92,7 +92,7 @@ export default function AdminManualAttendance() {
       }
 
       // Send request to permission endpoint
-      const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+      const response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -195,7 +195,7 @@ export default function AdminManualAttendance() {
             });
           }
 
-          const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+          const response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -351,7 +351,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch('https://attendance-backend-d4vi.onrender.com/auth/users', {
+      const res = await fetch('https://attendance-backend-d4vi.onrender.comauth/users', {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -424,7 +424,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${selectedDate}`, {
+      const res = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/all?date=${selectedDate}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -511,7 +511,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      let url = 'https://attendance-backend-d4vi.onrender.com/attendance/filter?';
+      let url = 'https://attendance-backend-d4vi.onrender.comattendance/filter?';
       const params = [];
 
       if (filters.startDate) params.push(`startDate=${filters.startDate}`);
@@ -692,7 +692,7 @@ export default function AdminManualAttendance() {
 
       // Check if record already exists
       let existingRecordId = null;
-      const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${editAttendanceData.date}`, {
+      const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/all?date=${editAttendanceData.date}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -709,7 +709,7 @@ export default function AdminManualAttendance() {
       let response;
       if (existingRecordId) {
         // Update existing record
-        response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existingRecordId}`, {
+        response = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/update/${existingRecordId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -720,7 +720,7 @@ export default function AdminManualAttendance() {
       } else {
         // Create new record
         if (editAttendanceData.attendanceType === 'permission') {
-          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+          response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -736,7 +736,7 @@ export default function AdminManualAttendance() {
             }),
           });
         } else {
-          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
+          response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/manual', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -849,7 +849,7 @@ export default function AdminManualAttendance() {
 
           // Check if record exists
           let existingRecordId = null;
-          const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${bulkEditData.date}`, {
+          const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/all?date=${bulkEditData.date}`, {
             headers: {
               'Authorization': `Bearer ${token}`
             },
@@ -865,7 +865,7 @@ export default function AdminManualAttendance() {
 
           let response;
           if (existingRecordId) {
-            response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existingRecordId}`, {
+            response = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/update/${existingRecordId}`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -875,7 +875,7 @@ export default function AdminManualAttendance() {
             });
           } else {
             if (bulkEditData.attendanceType === 'permission') {
-              response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+              response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -893,7 +893,7 @@ export default function AdminManualAttendance() {
                 }),
               });
             } else {
-              response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
+              response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/manual', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -1101,7 +1101,7 @@ export default function AdminManualAttendance() {
       let response;
 
       if (existing && existing.recordId) {
-        response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existing.recordId}`, {
+        response = await fetch(`https://attendance-backend-d4vi.onrender.comattendance/update/${existing.recordId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -1113,7 +1113,7 @@ export default function AdminManualAttendance() {
         // For permission, use permission endpoint
         if (record.status === 'permission') {
           const [permissionFrom, permissionTo] = record.permissionTime.split('-');
-          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+          response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/permission', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1128,7 +1128,7 @@ export default function AdminManualAttendance() {
             }),
           });
         } else {
-          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
+          response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/manual', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1222,7 +1222,7 @@ export default function AdminManualAttendance() {
       setLoading(true);
 
       // Bulk API call
-      const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/bulk', {
+      const response = await fetch('https://attendance-backend-d4vi.onrender.comattendance/bulk', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1326,7 +1326,33 @@ export default function AdminManualAttendance() {
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = users.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(users.length / itemsPerPage);
+useEffect(() => {
+  // Force horizontal scroll to work
+  const fixTableScroll = () => {
+    const tableContainers = document.querySelectorAll('.table-container');
+    tableContainers.forEach(container => {
+      // Remove any inline styles that might be blocking scroll
+      container.style.overflowX = 'auto';
+      container.style.overflowY = 'visible';
+      container.style.maxWidth = 'none';
+      
+      // Force table width
+      const table = container.querySelector('table');
+      if (table) {
+        table.style.minWidth = '1200px';
+        table.style.width = '100%';
+      }
+    });
+  };
 
+  // Run on mount and after data loads
+  fixTableScroll();
+  
+  // Also run on resize
+  window.addEventListener('resize', fixTableScroll);
+  
+  return () => window.removeEventListener('resize', fixTableScroll);
+}, [users, selectedDate, viewMode, filters]);
   // Initialize on component mount
   useEffect(() => {
     fetchUsers();
@@ -1369,19 +1395,26 @@ export default function AdminManualAttendance() {
       {/* Header */}
       <header className="dashboard-header">
         <div className="header-left">
-          <h1>Attendance Management</h1>
-          <p>Manage and track employee attendance records</p>
+          <button
+            className="btn-back"
+            onClick={() => navigate(-1)} // Go back to previous page
+          >
+            <ChevronLeft size={24} />
+            <span>Back</span>
+          </button>
+          <div className="header-title">
+            <h1>Attendance Management</h1>
+            <p>Manage and track employee attendance records</p>
+          </div>
         </div>
         <div className="header-right">
           <button className="btn-stats" onClick={() => setShowStatsModal(true)}>
             <BarChart2 size={20} />
             <span>Statistics</span>
           </button>
-          {/* <button className="btn-import" onClick={() => setShowImportModal(true)}>
-            <Upload size={20} />
-            <span>Import</span>
-          </button> */}
         </div>
+    
+       
       </header>
 
       {/* Main Content */}
@@ -1616,191 +1649,291 @@ export default function AdminManualAttendance() {
             </div>
 
             {/* Attendance Table */}
-            <div className="attendance-table-card">
-              <div className="card-header">
-                <h3>Attendance for {selectedDate}</h3>
-                <div className="header-actions">
-                  <button
-                    className={`btn-filter ${showFilters ? 'active' : ''}`}
-                    onClick={() => setShowFilters(!showFilters)}
-                  >
-                    <Filter size={16} />
-                    <span>Filters</span>
-                  </button>
-                  <button
-                    className="btn-submit-all"
-                    onClick={submitAllAttendance}
-                    disabled={loading}
-                  >
-                    <Save size={16} />
-                    <span>{loading ? 'Submitting...' : 'Submit All'}</span>
-                  </button>
-                </div>
-              </div>
+<div className="attendance-table-card">
+  <div className="card-header">
+    <h3>Attendance for {selectedDate}</h3>
+    <div className="header-actions">
+      <button
+        className={`btn-filter ${showFilters ? 'active' : ''}`}
+        onClick={() => setShowFilters(!showFilters)}
+      >
+        <Filter size={16} />
+        <span>Filters</span>
+      </button>
+      <button
+        className="btn-submit-all"
+        onClick={submitAllAttendance}
+        disabled={loading}
+      >
+        <Save size={16} />
+        <span>{loading ? 'Submitting...' : 'Submit All'}</span>
+      </button>
+    </div>
+  </div>
 
-              {showFilters && (
-                <div className="filter-section">
-                  <div className="filter-group">
-                    <label>
-                      <Search size={16} />
-                      <span>Search</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Search by name..."
-                      className="filter-input"
-                    />
-                  </div>
-                </div>
-              )}
+  {showFilters && (
+    <div className="filter-section">
+      <div className="filter-group">
+        <label>
+          <Search size={16} />
+          <span>Search</span>
+        </label>
+        <input
+          type="text"
+          placeholder="Search by name..."
+          className="filter-input"
+        />
+      </div>
+    </div>
+  )}
 
-              {usersLoading ? (
-                <div className="loading-state">
-                  <div className="spinner"></div>
-                  <p>Loading users...</p>
-                </div>
-              ) : users.length === 0 ? (
-                <div className="empty-state">
-                  <Users size={48} />
-                  <h3>No Users Found</h3>
-                  <p>Add users to start managing attendance</p>
-                </div>
-              ) : (
-                <div className="table-container">
-                  <table className="attendance-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '60px' }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedUsers.length === users.length}
-                            onChange={selectAllUsers}
-                          />
-                        </th>
-                        <th>Employee</th>
-                        <th>Designation</th>
-                        <th>Department</th>
-                        <th>Status</th>
-                        <th>Time</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentItems.map(user => {
-                        const record = attendanceRecords[user.id] || {
-                          status: 'pending',
-                          checkIn: '09:30',
-                          checkOut: '19:00',
-                          absenceReason: '',
-                          alreadyMarked: false
-                        };
-                        const existing = existingAttendance[user.id];
-                        const isAlreadyMarked = existing || record.alreadyMarked;
-                        const isExpanded = expandedUsers[user.id];
+  {usersLoading ? (
+    <div className="loading-state">
+      <div className="spinner"></div>
+      <p>Loading users...</p>
+    </div>
+  ) : users.length === 0 ? (
+    <div className="empty-state">
+      <Users size={48} />
+      <h3>No Users Found</h3>
+      <p>Add users to start managing attendance</p>
+    </div>
+  ) : (
+    <>
+      <div className="table-container-wrapper">
+        <div className="table-container" style={{
+  width: '100%',
+  overflowX: 'auto',
+  overflowY: 'visible',
+  WebkitOverflowScrolling: 'touch',
+  position: 'relative',
+  margin: '0',
+  padding: '0',
+  maxWidth: 'none'
+}}>
+  <table className="attendance-table" style={{
+    minWidth: '1200px',
+    width: '100%',
+    tableLayout: 'fixed'
+  }}>
+            <thead>
+              <tr>
+                <th style={{ width: '60px' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.length === users.length}
+                    onChange={selectAllUsers}
+                  />
+                </th>
+                <th>Employee</th>
+                <th>Designation</th>
+                <th>Department</th>
+                <th>Status</th>
+                <th>Time</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentItems.map(user => {
+                const record = attendanceRecords[user.id] || {
+                  status: 'pending',
+                  checkIn: '09:30',
+                  checkOut: '19:00',
+                  absenceReason: '',
+                  alreadyMarked: false
+                };
+                const existing = existingAttendance[user.id];
+                const isAlreadyMarked = existing || record.alreadyMarked;
+                const isExpanded = expandedUsers[user.id];
 
-                        return (
-                          <React.Fragment key={user.id}>
-                            <tr className={`user-row ${isAlreadyMarked ? 'marked' : ''} ${record.status}`}>
-                              <td>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedUsers.includes(user.id)}
-                                  onChange={() => toggleUserSelection(user.id)}
-                                />
-                              </td>
-                              <td>
-                                <div className="user-cell">
-                                  <div className="user-avatar">
-                                    {user.profile_url ? (
-                                      <img src={user.profile_url} alt={user.name} />
-                                    ) : (
-                                      <User size={20} />
-                                    )}
-                                  </div>
-                                  <div className="user-info">
-                                    <strong>{user.name}</strong>
-                                    <small>{user.employee_id || 'N/A'}</small>
-                                  </div>
-                                  <button
-                                    className="expand-btn"
-                                    onClick={() => toggleUserExpansion(user.id)}
-                                  >
-                                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                  </button>
+                return (
+                  <React.Fragment key={user.id}>
+                    <tr className={`user-row ${isAlreadyMarked ? 'marked' : ''} ${record.status}`}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.includes(user.id)}
+                          onChange={() => toggleUserSelection(user.id)}
+                        />
+                      </td>
+                      <td>
+                        <div className="user-cell">
+                          <div className="user-avatar">
+                            {user.profile_url ? (
+                              <img src={user.profile_url} alt={user.name} />
+                            ) : (
+                              <User size={20} />
+                            )}
+                          </div>
+                          <div className="user-info">
+                            <strong>{user.name}</strong>
+                            <small>{user.employee_id || 'N/A'}</small>
+                          </div>
+                          <button
+                            className="expand-btn"
+                            onClick={() => toggleUserExpansion(user.id)}
+                          >
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </button>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="designation-cell">
+                          <Briefcase size={14} />
+                          <span>{user.designation || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="department-cell">
+                          <Building size={14} />
+                          <span>{user.mobile || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <select
+                          value={record.status}
+                          onChange={(e) => {
+                            const updated = { ...attendanceRecords };
+                            updated[user.id] = {
+                              ...updated[user.id],
+                              status: e.target.value,
+                              alreadyMarked: false
+                            };
+                            setAttendanceRecords(updated);
+                          }}
+                          className="status-select"
+                          disabled={isAlreadyMarked}
+                        >
+                          <option value="pending">-- Select --</option>
+                          <option value="present">Present</option>
+                          <option value="absent">Absent</option>
+                          <option value="half-day-morning">Half Day (AM)</option>
+                          <option value="half-day-afternoon">Half Day (PM)</option>
+                          <option value="permission">Permission</option>
+                        </select>
+                      </td>
+                      <td>
+                        <div className="time-controls">
+                          {['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status) ? (
+                            <>
+                              <input
+                                type="time"
+                                value={record.checkIn || ''}
+                                onChange={(e) => {
+                                  const updated = { ...attendanceRecords };
+                                  updated[user.id] = {
+                                    ...updated[user.id],
+                                    checkIn: e.target.value,
+                                    alreadyMarked: false
+                                  };
+                                  setAttendanceRecords(updated);
+                                }}
+                                className="time-input"
+                                disabled={isAlreadyMarked}
+                              />
+                              <span className="time-separator">-</span>
+                              <input
+                                type="time"
+                                value={record.checkOut || ''}
+                                onChange={(e) => {
+                                  const updated = { ...attendanceRecords };
+                                  updated[user.id] = {
+                                    ...updated[user.id],
+                                    checkOut: e.target.value,
+                                    alreadyMarked: false
+                                  };
+                                  setAttendanceRecords(updated);
+                                }}
+                                className="time-input"
+                                disabled={isAlreadyMarked}
+                              />
+                            </>
+                          ) : record.status === 'absent' ? (
+                            <input
+                              type="text"
+                              value={record.absenceReason || ''}
+                              onChange={(e) => {
+                                const updated = { ...attendanceRecords };
+                                updated[user.id] = {
+                                  ...updated[user.id],
+                                  absenceReason: e.target.value,
+                                  alreadyMarked: false
+                                };
+                                setAttendanceRecords(updated);
+                              }}
+                              className="reason-input"
+                              placeholder="Absence reason"
+                              disabled={isAlreadyMarked}
+                            />
+                          ) : record.status === 'permission' ? (
+                            <div className="permission-inputs">
+                              <input
+                                type="time"
+                                value={permissionFrom}
+                                onChange={(e) => setPermissionFrom(e.target.value)}
+                                className="time-input"
+                                placeholder="From"
+                                disabled={isAlreadyMarked}
+                              />
+                              <span className="time-separator">to</span>
+                              <input
+                                type="time"
+                                value={permissionTo}
+                                onChange={(e) => setPermissionTo(e.target.value)}
+                                className="time-input"
+                                placeholder="To"
+                                disabled={isAlreadyScrollable}
+                              />
+                              <input
+                                type="text"
+                                value={permissionReason}
+                                onChange={(e) => setPermissionReason(e.target.value)}
+                                className="reason-input"
+                                placeholder="Permission reason"
+                                disabled={isAlreadyMarked}
+                              />
+                            </div>
+                          ) : (
+                            <span className="no-time">--:--</span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="action-buttons">
+                          <button
+                            className="btn-submit"
+                            onClick={() => submitIndividualAttendance(user.id)}
+                            disabled={isAlreadyMarked || record.status === 'pending'}
+                            title={isAlreadyMarked ? "Already marked" : "Submit attendance"}
+                          >
+                            <Save size={14} />
+                          </button>
+                          <button
+                            className="btn-edit"
+                            onClick={() => handleEditAttendance(user)}
+                            title="Edit attendance"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="details-row">
+                        <td colSpan="7">
+                          <div className="user-details">
+                            <div className="detail-section">
+                              <h4>Attendance Details</h4>
+                              <div className="detail-grid">
+                                <div className="detail-item">
+                                  <span className="detail-label">Status:</span>
+                                  <span className={`detail-value status-${record.status}`}>
+                                    {record.status.replace('-', ' ').toUpperCase()}
+                                  </span>
                                 </div>
-                              </td>
-                              <td>
-                                <div className="designation-cell">
-                                  <Briefcase size={14} />
-                                  <span>{user.designation || 'N/A'}</span>
-                                </div>
-                              </td>
-                              <td>
-                                <div className="department-cell">
-                                  <Building size={14} />
-                                  <span>{user.mobile || 'N/A'}</span>
-                                </div>
-                              </td>
-                              <td>
-                                <select
-                                  value={record.status}
-                                  onChange={(e) => {
-                                    const updated = { ...attendanceRecords };
-                                    updated[user.id] = {
-                                      ...updated[user.id],
-                                      status: e.target.value,
-                                      alreadyMarked: false
-                                    };
-                                    setAttendanceRecords(updated);
-                                  }}
-                                  className="status-select"
-                                  disabled={isAlreadyMarked}
-                                >
-                                  <option value="pending">-- Select --</option>
-                                  <option value="present">Present</option>
-                                  <option value="absent">Absent</option>
-                                  <option value="half-day-morning">Half Day (AM)</option>
-                                  <option value="half-day-afternoon">Half Day (PM)</option>
-                                  <option value="permission">Permission</option>
-                                </select>
-                              </td>
-                              <td>
-                                <div className="time-controls">
-                                  {['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status) ? (
-                                    <>
-                                      <input
-                                        type="time"
-                                        value={record.checkIn || ''}
-                                        onChange={(e) => {
-                                          const updated = { ...attendanceRecords };
-                                          updated[user.id] = {
-                                            ...updated[user.id],
-                                            checkIn: e.target.value,
-                                            alreadyMarked: false
-                                          };
-                                          setAttendanceRecords(updated);
-                                        }}
-                                        className="time-input"
-                                        disabled={isAlreadyMarked}
-                                      />
-                                      <span className="time-separator">-</span>
-                                      <input
-                                        type="time"
-                                        value={record.checkOut || ''}
-                                        onChange={(e) => {
-                                          const updated = { ...attendanceRecords };
-                                          updated[user.id] = {
-                                            ...updated[user.id],
-                                            checkOut: e.target.value,
-                                            alreadyMarked: false
-                                          };
-                                          setAttendanceRecords(updated);
-                                        }}
-                                        className="time-input"
-                                        disabled={isAlreadyMarked}
-                                      />
-                                    </>
-                                  ) : record.status === 'absent' ? (
+                                {record.status === 'absent' && (
+                                  <div className="detail-item">
+                                    <span className="detail-label">Reason:</span>
                                     <input
                                       type="text"
                                       value={record.absenceReason || ''}
@@ -1813,200 +1946,122 @@ export default function AdminManualAttendance() {
                                         };
                                         setAttendanceRecords(updated);
                                       }}
-                                      className="reason-input"
+                                      className="detail-input"
                                       placeholder="Absence reason"
-                                      disabled={isAlreadyMarked}
                                     />
-                                  ) : record.status === 'permission' ? (
-                                    <div className="permission-inputs">
+                                  </div>
+                                )}
+                                {record.status === 'permission' && (
+                                  <div className="detail-item">
+                                    <span className="detail-label">Permission:</span>
+                                    <div className="permission-details">
                                       <input
                                         type="time"
                                         value={permissionFrom}
                                         onChange={(e) => setPermissionFrom(e.target.value)}
-                                        className="time-input"
-                                        placeholder="From"
-                                        disabled={isAlreadyMarked}
+                                        className="detail-input"
+                                        placeholder="HH:mm"
                                       />
                                       <span className="time-separator">to</span>
                                       <input
                                         type="time"
                                         value={permissionTo}
                                         onChange={(e) => setPermissionTo(e.target.value)}
-                                        className="time-input"
-                                        placeholder="To"
-                                        disabled={isAlreadyMarked}
+                                        className="detail-input"
+                                        placeholder="HH:mm"
                                       />
                                       <input
                                         type="text"
                                         value={permissionReason}
                                         onChange={(e) => setPermissionReason(e.target.value)}
-                                        className="reason-input"
-                                        placeholder="Permission reason"
-                                        disabled={isAlreadyMarked}
+                                        className="detail-input"
+                                        placeholder="Reason"
                                       />
-                                    </div>
-                                  ) : (
-                                    <span className="no-time">--:--</span>
-                                  )}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="action-buttons">
-                                  <button
-                                    className="btn-submit"
-                                    onClick={() => submitIndividualAttendance(user.id)}
-                                    disabled={isAlreadyMarked || record.status === 'pending'}
-                                    title={isAlreadyMarked ? "Already marked" : "Submit attendance"}
-                                  >
-                                    <Save size={14} />
-                                  </button>
-                                  <button
-                                    className="btn-edit"
-                                    onClick={() => handleEditAttendance(user)}
-                                    title="Edit attendance"
-                                  >
-                                    <Edit2 size={14} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                            {isExpanded && (
-                              <tr className="details-row">
-                                <td colSpan="7">
-                                  <div className="user-details">
-                                    <div className="detail-section">
-                                      <h4>Attendance Details</h4>
-                                      <div className="detail-grid">
-                                        <div className="detail-item">
-                                          <span className="detail-label">Status:</span>
-                                          <span className={`detail-value status-${record.status}`}>
-                                            {record.status.replace('-', ' ').toUpperCase()}
-                                          </span>
-                                        </div>
-                                        {record.status === 'absent' && (
-                                          <div className="detail-item">
-                                            <span className="detail-label">Reason:</span>
-                                            <input
-                                              type="text"
-                                              value={record.absenceReason || ''}
-                                              onChange={(e) => {
-                                                const updated = { ...attendanceRecords };
-                                                updated[user.id] = {
-                                                  ...updated[user.id],
-                                                  absenceReason: e.target.value,
-                                                  alreadyMarked: false
-                                                };
-                                                setAttendanceRecords(updated);
-                                              }}
-                                              className="detail-input"
-                                              placeholder="Absence reason"
-                                            />
-                                          </div>
-                                        )}
-                                        {record.status === 'permission' && (
-                                          <div className="detail-item">
-                                            <span className="detail-label">Permission:</span>
-                                            <div className="permission-details">
-                                              <input
-                                                type="time"
-                                                value={permissionFrom}
-                                                onChange={(e) => setPermissionFrom(e.target.value)}
-                                                className="detail-input"
-                                                placeholder="HH:mm"
-                                              />
-                                              <span className="time-separator">to</span>
-                                              <input
-                                                type="time"
-                                                value={permissionTo}
-                                                onChange={(e) => setPermissionTo(e.target.value)}
-                                                className="detail-input"
-                                                placeholder="HH:mm"
-                                              />
-                                              <input
-                                                type="text"
-                                                value={permissionReason}
-                                                onChange={(e) => setPermissionReason(e.target.value)}
-                                                className="detail-input"
-                                                placeholder="Reason"
-                                              />
-                                              <button
-                                                className="btn-save-permission"
-                                                onClick={() => {
-                                                  // Update the record with permission data
-                                                  const updated = { ...attendanceRecords };
-                                                  updated[user.id] = {
-                                                    ...updated[user.id],
-                                                    permissionTime: `${permissionFrom}-${permissionTo}`,
-                                                    permissionReason: permissionReason,
-                                                    alreadyMarked: false
-                                                  };
-                                                  setAttendanceRecords(updated);
-                                                  handlePermissionSubmit(user.id);
-                                                }}
-                                                disabled={!permissionFrom || !permissionTo || !permissionReason.trim()}
-                                              >
-                                                Save
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
-
-
-                                      </div>
+                                      <button
+                                        className="btn-save-permission"
+                                        onClick={() => {
+                                          // Update the record with permission data
+                                          const updated = { ...attendanceRecords };
+                                          updated[user.id] = {
+                                            ...updated[user.id],
+                                            permissionTime: `${permissionFrom}-${permissionTo}`,
+                                            permissionReason: permissionReason,
+                                            alreadyMarked: false
+                                          };
+                                          setAttendanceRecords(updated);
+                                          handlePermissionSubmit(user.id);
+                                        }}
+                                        disabled={!permissionFrom || !permissionTo || !permissionReason.trim()}
+                                      >
+                                        Save
+                                      </button>
                                     </div>
                                   </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* Scroll hint */}
+        <div className="scroll-hint">
+          <ChevronLeft size={16} />
+          <span>Scroll horizontally to see all columns</span>
+          <ChevronRight size={16} />
+        </div>
+      </div>
 
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="pagination">
-                      <button
-                        className="pagination-btn"
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        let pageNumber;
-                        if (totalPages <= 5) {
-                          pageNumber = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNumber = i + 1;
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNumber = totalPages - 4 + i;
-                        } else {
-                          pageNumber = currentPage - 2 + i;
-                        }
-                        return (
-                          <button
-                            key={pageNumber}
-                            className={`pagination-btn ${currentPage === pageNumber ? 'active' : ''}`}
-                            onClick={() => setCurrentPage(pageNumber)}
-                          >
-                            {pageNumber}
-                          </button>
-                        );
-                      })}
-                      <button
-                        className="pagination-btn"
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages}
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="pagination">
+          <button
+            className="pagination-btn"
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNumber;
+            if (totalPages <= 5) {
+              pageNumber = i + 1;
+            } else if (currentPage <= 3) {
+              pageNumber = i + 1;
+            } else if (currentPage >= totalPages - 2) {
+              pageNumber = totalPages - 4 + i;
+            } else {
+              pageNumber = currentPage - 2 + i;
+            }
+            return (
+              <button
+                key={pageNumber}
+                className={`pagination-btn ${currentPage === pageNumber ? 'active' : ''}`}
+                onClick={() => setCurrentPage(pageNumber)}
+              >
+                {pageNumber}
+              </button>
+            );
+          })}
+          <button
+            className="pagination-btn"
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
+    </>
+  )}
+</div>
           </>
         ) : (
           <>

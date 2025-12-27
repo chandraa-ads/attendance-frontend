@@ -15,7 +15,7 @@ export default function AdminAllAttendance() {
     status: '',
     startDate: '',
     endDate: '',
-    department: '',
+    designation: '',
     reportType: 'detailed'
   });
   const [currentPage, setCurrentPage] = useState(1);
@@ -29,7 +29,7 @@ export default function AdminAllAttendance() {
     return authData?.session?.access_token || authData?.access_token || authData?.token || null;
   };
 
-  
+
   useEffect(() => {
     fetchAttendance();
   }, []);
@@ -71,7 +71,7 @@ export default function AdminAllAttendance() {
       setLoading(true);
       const token = getToken();
 
-      const res = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/all', {
+      const res = await fetch('https://attendance-backend-d4vi.onrender.comattendance/all', {
         headers: token ? {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -100,7 +100,7 @@ export default function AdminAllAttendance() {
       setLoading(true);
       const token = getToken();
 
-      const url = `https://attendance-backend-d4vi.onrender.com/attendance/filter?startDate=${startDate}&endDate=${endDate}`;
+      const url = `https://attendance-backend-d4vi.onrender.comattendance/filter?startDate=${startDate}&endDate=${endDate}`;
       const res = await fetch(url, {
         headers: token ? {
           Authorization: `Bearer ${token}`,
@@ -125,78 +125,187 @@ export default function AdminAllAttendance() {
 
   // New function to generate PDF via backend
   // ✅ Backend PDF generator (UPDATED)
+  // Backend PDF generator (IMPROVED)
   const generateBackendPDF = async () => {
     try {
       setGeneratingPDF(true);
       const token = getToken();
 
-      // ✅ Build payload dynamically (NO empty strings)
-      const payload = {
-        reportType: filters.reportType || 'detailed'
-      };
-
-      // Priority: day → month → date range
-      if (filters.date) {
-        payload.day = filters.date;
-      } else if (filters.startDate && filters.endDate) {
-        payload.startDate = filters.startDate;
-        payload.endDate = filters.endDate;
+      if (!token) {
+        alert('Authentication required. Please login again.');
+        setGeneratingPDF(false);
+        return;
       }
 
-      if (filters.employeeId) payload.employeeId = filters.employeeId;
-      if (filters.department) payload.department = filters.department;
+      // ✅ Build minimal payload first
+      const payload = {
+        reportType: 'detailed',
+        startDate: filters.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: filters.endDate || new Date().toISOString().split('T')[0]
+      };
 
-      console.log('📄 Backend PDF Payload:', payload);
+      // Only add filters if they have values
+      if (filters.date) {
+        payload.day = filters.date;
+        delete payload.startDate;
+        delete payload.endDate;
+      }
+
+      if (filters.employeeId?.trim()) payload.employeeId = filters.employeeId;
+      if (filters.designation?.trim()) payload.designation = filters.designation;
+
+      console.log('📄 Backend PDF Payload (simplified):', payload);
+
+      // Test the endpoint first with a simple GET request
+      try {
+        const testResponse = await fetch('https://attendance-backend-d4vi.onrender.comattendance/test', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!testResponse.ok) {
+          console.warn('Test endpoint failed, but continuing...');
+        }
+      } catch (testErr) {
+        console.warn('Test request failed:', testErr);
+      }
+
+      // Show user we're starting
+      const userConfirmed = window.confirm(
+        'Generate detailed PDF report via backend? This may take a few moments.'
+      );
+
+      if (!userConfirmed) {
+        setGeneratingPDF(false);
+        return;
+      }
 
       const response = await fetch(
-        'https://attendance-backend-d4vi.onrender.com/attendance/generate-pdf',
+        'https://attendance-backend-d4vi.onrender.comattendance/generate-pdf',
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(payload)
         }
       );
 
+      console.log('Response status:', response.status, response.statusText);
+
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`${response.status} - ${errorText}`);
+        let errorMessage = `Server error: ${response.status} ${response.statusText}`;
+
+        try {
+          const errorData = await response.json();
+          console.error('Error details:', errorData);
+          errorMessage = errorData.message || errorMessage;
+
+          // Check for specific backend errors
+          if (errorData.message?.includes('No attendance data found')) {
+            alert('No data found for the selected filters. Try different dates or filters.');
+            setGeneratingPDF(false);
+            return;
+          }
+        } catch (parseError) {
+          // If not JSON, try text
+          try {
+            const errorText = await response.text();
+            console.error('Error text:', errorText);
+            errorMessage = errorText || errorMessage;
+          } catch (textError) {
+            console.error('Could not read error response:', textError);
+          }
+        }
+
+        throw new Error(errorMessage);
       }
 
-      // ✅ Download PDF
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      // Check content type
+      const contentType = response.headers.get('content-type');
+      console.log('Content-Type:', contentType);
 
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = `attendance-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+      if (!contentType || !contentType.includes('application/pdf')) {
+        console.warn('Response is not PDF. Headers:', Object.fromEntries(response.headers.entries()));
+
+        // Try to read as text to see what we got
+        const responseText = await response.text();
+        console.log('Response text (first 500 chars):', responseText.substring(0, 500));
+
+        throw new Error('Server did not return a PDF file');
+      }
+
+      // Get the blob
+      const blob = await response.blob();
+      console.log('Blob size:', blob.size, 'type:', blob.type);
+
+      if (blob.size === 0) {
+        throw new Error('Received empty PDF file');
+      }
+
+      // Create filename
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `attendance-report-${payload.startDate || payload.day || 'all'}-to-${payload.endDate || payload.day || 'all'}.pdf`;
 
       if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?(.+)"?/);
-        if (match?.[1]) filename = match[1];
+        // Try to extract filename
+        const matches = contentDisposition.match(/filename="?([^"]+)"?/i);
+        if (matches && matches[1]) {
+          filename = matches[1];
+        }
       }
 
+      // Download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
 
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        a.remove();
+      }, 100);
 
-      alert('✅ PDF generated successfully (Backend)');
+      alert(`✅ PDF downloaded: ${filename}`);
+
     } catch (error) {
-      console.error('❌ Backend PDF error:', error);
-      alert('Backend PDF failed, using client PDF...');
-      handleExportPDF(false); // fallback
+      console.error('❌ Backend PDF error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+
+      // Offer fallback options
+      const fallbackChoice = confirm(
+        `Backend PDF failed: ${error.message}\n\n` +
+        'Choose an alternative:\n' +
+        '• OK = Try browser PDF (simpler format)\n' +
+        '• Cancel = Export CSV instead'
+      );
+
+      if (fallbackChoice) {
+        // Try client-side PDF
+        const clientSuccess = handleClientSidePDF();
+        if (!clientSuccess) {
+          // If client PDF also fails, offer CSV
+          if (confirm('Browser PDF also failed. Export as CSV instead?')) {
+            handleExportCSV();
+          }
+        }
+      } else {
+        // Export CSV
+        handleExportCSV();
+      }
     } finally {
       setGeneratingPDF(false);
     }
   };
-
-
   // Enhanced PDF export with both options
   const handleExportPDF = async (useBackend = false) => {
     if (filteredAttendance.length === 0) {
@@ -209,10 +318,193 @@ export default function AdminAllAttendance() {
       return;
     }
 
-    // client-side logic remains SAME
-    // (no change needed below)
+    // Client-side PDF fallback
+    handleClientSidePDF();
   };
 
+  // Add this new function for client-side PDF
+  // Simple client-side PDF without autoTable plugin
+  const handleClientSidePDF = () => {
+    try {
+      if (filteredAttendance.length === 0) {
+        alert('No data to export!');
+        return;
+      }
+
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Title
+      doc.setFontSize(18);
+      doc.setTextColor(40, 40, 40);
+      doc.text('ATTENDANCE REPORT', 105, 20, null, null, 'center');
+
+      // Subtitle
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 105, 28, null, null, 'center');
+
+      // Filter info
+      let filterInfo = '';
+      if (filters.date) filterInfo += `Date: ${filters.date} | `;
+      if (filters.startDate && filters.endDate) {
+        filterInfo += `Range: ${filters.startDate} to ${filters.endDate} | `;
+      }
+      if (filters.name) filterInfo += `Name: ${filters.name} | `;
+      if (filters.status) filterInfo += `Status: ${filters.status} | `;
+
+      if (filterInfo) {
+        filterInfo = filterInfo.slice(0, -3); // Remove last " | "
+        doc.setFontSize(9);
+        doc.text(filterInfo, 105, 35, null, null, 'center');
+      }
+
+      // Table headers
+      const headers = [
+        { text: 'Date', x: 10, width: 25 },
+        { text: 'Emp ID', x: 35, width: 25 },
+        { text: 'Name', x: 60, width: 40 },
+        { text: 'Dept', x: 100, width: 30 },
+        { text: 'Check In', x: 130, width: 25 },
+        { text: 'Check Out', x: 155, width: 25 },
+        { text: 'Total Time', x: 180, width: 25 },
+        { text: 'Status', x: 205, width: 30 },
+        { text: 'Type', x: 235, width: 20 }
+      ];
+
+      // Draw header background
+      doc.setFillColor(41, 128, 185);
+      doc.rect(10, 40, 250, 8, 'F');
+
+      // Draw header text
+      doc.setFontSize(9);
+      doc.setTextColor(255, 255, 255);
+      headers.forEach(header => {
+        doc.text(header.text, header.x + 2, 45);
+      });
+
+      // Draw table rows
+      let y = 50;
+      const rowHeight = 8;
+      const pageHeight = doc.internal.pageSize.height;
+
+      filteredAttendance.forEach((record, index) => {
+        // Check for page break
+        if (y > pageHeight - 20) {
+          doc.addPage();
+          y = 20;
+
+          // Redraw headers on new page
+          doc.setFillColor(41, 128, 185);
+          doc.rect(10, y, 250, 8, 'F');
+          doc.setTextColor(255, 255, 255);
+          headers.forEach(header => {
+            doc.text(header.text, header.x + 2, y + 5);
+          });
+          y += rowHeight + 2;
+        }
+
+        // Alternate row colors
+        if (index % 2 === 0) {
+          doc.setFillColor(245, 245, 245);
+          doc.rect(10, y, 250, rowHeight, 'F');
+        }
+
+        // Set text color
+        doc.setTextColor(40, 40, 40);
+        doc.setFontSize(8);
+
+        // Draw row data
+        const rowData = [
+          record.date,
+          record.user_info?.employee_id || '-',
+          record.user_info?.name?.substring(0, 15) + (record.user_info?.name?.length > 15 ? '...' : '') || '-',
+          record.user_info?.designation?.substring(0, 10) + (record.user_info?.designation?.length > 10 ? '...' : '') || '-',
+          formatTime(record.check_in),
+          formatTime(record.check_out),
+          record.total_time_formatted || '-',
+          getStatus(record),
+          record.manual_entry ? 'Manual' : 'Auto'
+        ];
+
+        headers.forEach((header, i) => {
+          const text = String(rowData[i]);
+          // Trim text if too long
+          const maxChars = Math.floor(header.width / 1.5);
+          const displayText = text.length > maxChars ? text.substring(0, maxChars - 1) + '...' : text;
+
+          doc.text(displayText, header.x + 2, y + 5);
+        });
+
+        y += rowHeight;
+      });
+
+      // Add summary
+      const finalY = y + 10;
+      if (finalY < pageHeight - 30) {
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont(undefined, 'bold');
+        doc.text('SUMMARY', 10, finalY);
+        doc.setFont(undefined, 'normal');
+
+        const presentCount = filteredAttendance.filter(a => !a.is_absent && a.check_in).length;
+        const absentCount = filteredAttendance.filter(a => a.is_absent).length;
+        const halfDayCount = filteredAttendance.filter(a => a.check_in && !a.check_out).length;
+        const manualCount = filteredAttendance.filter(a => a.manual_entry).length;
+        const autoCount = filteredAttendance.filter(a => !a.manual_entry).length;
+
+        doc.setFontSize(9);
+        doc.text(`Total Records: ${filteredAttendance.length}`, 10, finalY + 7);
+        doc.text(`Present: ${presentCount}`, 60, finalY + 7);
+        doc.text(`Absent: ${absentCount}`, 100, finalY + 7);
+        doc.text(`Half Days: ${halfDayCount}`, 140, finalY + 7);
+        doc.text(`Manual Entries: ${manualCount}`, 180, finalY + 7);
+        doc.text(`Auto Entries: ${autoCount}`, 220, finalY + 7);
+      }
+
+      // Save the PDF
+      const filename = `attendance-report-${filters.date || 'all'}-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(filename);
+
+      console.log(`Client PDF exported: ${filteredAttendance.length} records`);
+      return true;
+
+    } catch (err) {
+      console.error('Client-side PDF error:', err);
+
+      // Try a simpler approach as fallback
+      try {
+        // Simple text-based PDF as last resort
+        const simpleDoc = new jsPDF();
+        simpleDoc.text('Attendance Report', 20, 20);
+        simpleDoc.text(`Generated: ${new Date().toLocaleString()}`, 20, 30);
+        simpleDoc.text(`Total Records: ${filteredAttendance.length}`, 20, 40);
+
+        let y = 50;
+        filteredAttendance.slice(0, 30).forEach((record, index) => {
+          if (y > 280) return; // Stop if page is full
+          simpleDoc.text(
+            `${record.date} - ${record.user_info?.name || 'Unknown'} - ${getStatus(record)}`,
+            20, y
+          );
+          y += 7;
+        });
+
+        const filename = `simple-attendance-${new Date().toISOString().slice(0, 10)}.pdf`;
+        simpleDoc.save(filename);
+        alert('Generated a simplified PDF report');
+        return true;
+      } catch (simpleErr) {
+        console.error('Simple PDF also failed:', simpleErr);
+        alert('Failed to generate PDF. Please try CSV or Excel export instead.');
+        return false;
+      }
+    }
+  };
 
   const handleViewYesterday = async () => {
     const yesterday = getYesterday();
@@ -345,7 +637,7 @@ export default function AdminAllAttendance() {
       status: '',
       startDate: '',
       endDate: '',
-      department: '',
+      designation: '',
       reportType: 'detailed'
     });
     setSelectedDates([]);
@@ -360,7 +652,7 @@ export default function AdminAllAttendance() {
 
     try {
       const csvContent = [
-        ['Date', 'Employee ID', 'Name', 'Email', 'Department', 'Designation',
+        ['Date', 'Employee ID', 'Name', 'Email', 'designation', 'Designation',
           'Check In (IST)', 'Check Out (IST)', 'Total Time', 'Status',
           'Absence Reason', 'Manual Entry', 'Record Date'],
         ...filteredAttendance.map(record => [
@@ -368,7 +660,7 @@ export default function AdminAllAttendance() {
           `"${record.user_info?.employee_id || '-'}"`,
           `"${record.user_info?.name || '-'}"`,
           `"${record.user_info?.email || '-'}"`,
-          `"${record.user_info?.department || '-'}"`,
+          `"${record.user_info?.designation || '-'}"`,
           `"${record.user_info?.designation || '-'}"`,
           `"${formatTime(record.check_in)}"`,
           `"${formatTime(record.check_out)}"`,
@@ -410,7 +702,7 @@ export default function AdminAllAttendance() {
         'Employee ID': record.user_info?.employee_id || '-',
         'Name': record.user_info?.name || '-',
         'Email': record.user_info?.email || '-',
-        'Department': record.user_info?.department || '-',
+        'designation': record.user_info?.designation || '-',
         'Designation': record.user_info?.designation || '-',
         'Check In (IST)': formatTime(record.check_in),
         'Check Out (IST)': formatTime(record.check_out),
@@ -504,7 +796,7 @@ export default function AdminAllAttendance() {
       if (filters.name) activeFilters.push(`Name: ${filters.name}`);
       if (filters.employeeId) activeFilters.push(`Employee ID: ${filters.employeeId}`);
       if (filters.status) activeFilters.push(`Status: ${filters.status}`);
-      if (filters.department) activeFilters.push(`Department: ${filters.department}`);
+      if (filters.designation) activeFilters.push(`designation: ${filters.designation}`);
       if (activeFilters.length === 0) activeFilters.push('No filters applied');
 
       activeFilters.forEach((item, index) => {
@@ -553,41 +845,62 @@ export default function AdminAllAttendance() {
 
   return (
     <div className="admin-all-attendance">
-      <div className="header">
-        <div className="header-main">
-          <h1>All Attendance Records</h1>
-          <div className="header-actions">
-            <button onClick={handleExportCSV} className="export-btn csv" title="Export as CSV">
-              📄 Export CSV
-            </button>
-            <button onClick={handleExportExcel} className="export-btn excel" title="Export as Excel">
-              📊 Export Excel
-            </button>
-            <div className="pdf-export-group">
-              {/* <button
-                onClick={() => handleExportPDF(false)}
-                className="export-btn pdf"
-                disabled={generatingPDF}
-              >
-                📑 Export PDF (Client)
-              </button> */}
 
-              <button
-                onClick={() => handleExportPDF(true)}
-                className="export-btn pdf-backend "
-                disabled={generatingPDF}
-              >
-                {generatingPDF ? '⏳ Generating...' : '🚀 Export PDF'}
-              </button>
-
-            </div>
-            <button onClick={handleExportSummary} className="export-btn summary" title="Export Summary Report">
-              📈 Summary Report
+      <div className="header-main">
+        {/* Add Back Button Here */}
+        <div className="header-left">
+          <button
+            className="btn-back"
+            onClick={() => window.history.back()} // Or navigate(-1) if using React Router
+            title="Go back to previous page"
+          >
+            ← Back
+          </button>
+          <div className="header-title">
+            <h1>All Attendance Records</h1>
+            <p>View and manage all attendance records</p>
+          </div>
+        </div>
+        <div className="header-actions">
+          <button onClick={handleExportCSV} className="export-btn csv" title="Export as CSV">
+            📄 Export CSV
+          </button>
+          <button onClick={handleExportExcel} className="export-btn excel" title="Export as Excel">
+            📊 Export Excel
+          </button>
+          <div className="pdf-export-group">
+            <button
+              onClick={() => handleExportPDF(true)}
+              className="export-btn pdf-backend"
+              disabled={generatingPDF || filteredAttendance.length === 0}
+              title={filteredAttendance.length === 0 ? 'No data to export' : 'Generate PDF via backend'}
+            >
+              {generatingPDF ? (
+                <>
+                  <span className="spinner"></span>
+                  Generating PDF...
+                </>
+              ) : (
+                '📊 Export PDF (Backend)'
+              )}
             </button>
-            <button onClick={fetchAttendance} className="refresh-btn" title="Refresh Data">
-              🔄 Refresh
+
+            {/* Add a client-side PDF button as backup */}
+            <button
+              onClick={() => handleClientSidePDF()}
+              className="export-btn pdf-client"
+              disabled={filteredAttendance.length === 0}
+              title="Generate PDF using browser (faster, simpler)"
+            >
+              📄 Quick PDF
             </button>
           </div>
+          <button onClick={handleExportSummary} className="export-btn summary" title="Export Summary Report">
+            📈 Summary Report
+          </button>
+          <button onClick={fetchAttendance} className="refresh-btn" title="Refresh Data">
+            🔄 Refresh
+          </button>
         </div>
       </div>
 
@@ -703,13 +1016,13 @@ export default function AdminAllAttendance() {
             />
           </div>
           <div className="filter-group">
-            <label>Department</label>
+            <label>Mobile Number</label>
             <input
               type="text"
-              name="department"
-              value={filters.department}
+              name="mobileNumber"
+              value={filters.mobileNumber}
               onChange={handleFilterChange}
-              placeholder="Search by department"
+              placeholder="Search by mobile number"
               className="filter-input"
             />
           </div>
@@ -750,21 +1063,23 @@ export default function AdminAllAttendance() {
       </div>
 
       {/* Date Range Display */}
-      {selectedDates.length > 0 && (
-        <div className="date-range-display">
-          <h3>Selected Date{selectedDates.length > 1 ? 's' : ''}</h3>
-          <div className="date-chips">
-            {selectedDates.slice(0, 10).map(date => (
-              <span key={date} className="date-chip">
-                {date}
-              </span>
-            ))}
-            {selectedDates.length > 10 && (
-              <span className="date-chip more">+{selectedDates.length - 10} more</span>
-            )}
+      {
+        selectedDates.length > 0 && (
+          <div className="date-range-display">
+            <h3>Selected Date{selectedDates.length > 1 ? 's' : ''}</h3>
+            <div className="date-chips">
+              {selectedDates.slice(0, 10).map(date => (
+                <span key={date} className="date-chip">
+                  {date}
+                </span>
+              ))}
+              {selectedDates.length > 10 && (
+                <span className="date-chip more">+{selectedDates.length - 10} more</span>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Attendance Table */}
       <div className="table-container">
@@ -778,7 +1093,7 @@ export default function AdminAllAttendance() {
                   <th>Date</th>
                   <th>Employee ID</th>
                   <th>Name</th>
-                  <th>Department</th>
+                  <th>designation</th>
                   <th>Check In</th>
                   <th>Check Out</th>
                   <th>Total Time</th>
@@ -805,7 +1120,7 @@ export default function AdminAllAttendance() {
                           <span>{record.user_info?.name || '-'}</span>
                         </div>
                       </td>
-                      <td>{record.user_info?.department || '-'}</td>
+                      <td>{record.user_info?.designation || '-'}</td>
                       <td>{formatTime(record.check_in)}</td>
                       <td>{formatTime(record.check_out)}</td>
                       <td>{record.total_time_formatted || '-'}</td>
@@ -920,25 +1235,29 @@ export default function AdminAllAttendance() {
       </div>
 
       {/* PDF Generation Status */}
-      {generatingPDF && (
-        <div className="pdf-generation-status">
-          <p>⏳ Generating PDF via backend... This may take a moment.</p>
-          <div className="loading-spinner"></div>
-        </div>
-      )}
+      {
+        generatingPDF && (
+          <div className="pdf-generation-status">
+            <p>⏳ Generating PDF via backend... This may take a moment.</p>
+            <div className="loading-spinner"></div>
+          </div>
+        )
+      }
 
       {/* Debug Info */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="debug-info">
-          <small>
-            Data Status: {filteredAttendance.length} filtered records, {attendance.length} total records
-            <br />
-            Selected Dates: {selectedDates.length}
-            <br />
-            PDF Backend: {generatingPDF ? 'Processing...' : 'Ready'}
-          </small>
-        </div>
-      )}
-    </div>
+      {
+        process.env.NODE_ENV === 'development' && (
+          <div className="debug-info">
+            <small>
+              Data Status: {filteredAttendance.length} filtered records, {attendance.length} total records
+              <br />
+              Selected Dates: {selectedDates.length}
+              <br />
+              PDF Backend: {generatingPDF ? 'Processing...' : 'Ready'}
+            </small>
+          </div>
+        )
+      }
+    </div >
   );
 }

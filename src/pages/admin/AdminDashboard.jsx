@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import '../../assets/styles/AdminDashboard.css';
+
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faRightFromBracket } from '@fortawesome/free-solid-svg-icons';
 import Reportss from './Reports';
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -20,8 +23,56 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState('');
 
-  const API_BASE_URL = 'https://attendance-backend-d4vi.onrender.com';
+  const API_BASE_URL = 'http://localhost:3000';
+// Handle logout
+const handleLogout = async () => {
+  try {
+    // Get the current auth data
+    const authData = localStorage.getItem('auth');
+    if (!authData) {
+      localStorage.removeItem('auth');
+      navigate('/login');
+      return;
+    }
 
+    const parsedAuth = JSON.parse(authData);
+    const token = parsedAuth.session?.access_token;
+
+    // If using Supabase, you might want to call signout endpoint
+    if (token && API_BASE_URL.includes('supabase')) {
+      try {
+        await fetch(`${API_BASE_URL}/auth/v1/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+        });
+      } catch (error) {
+        console.log('Logout API call failed, continuing with client logout');
+      }
+    }
+
+    // Clear all localStorage items
+    localStorage.removeItem('auth');
+    
+    // Clear any other related items
+    const itemsToRemove = ['user', 'token', 'access_token', 'refresh_token'];
+    itemsToRemove.forEach(item => localStorage.removeItem(item));
+
+    // Navigate to login page
+    navigate('/login');
+    
+    // Force reload to clear any state
+    window.location.href = '/login';
+    
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Force logout anyway
+    localStorage.removeItem('auth');
+    navigate('/login');
+  }
+};
   // Quick Actions Data
   const quickActions = [
     {
@@ -48,14 +99,7 @@ export default function AdminDashboard() {
       path: '/admin/profile',
       color: '#8b5cf6'
     },
-    {
-      id: 4,
-      title: 'Reports',
-      description: 'Generate attendance reports',
-      icon: '📈',
-       path: '/admin/reports',
-      color: '#f59e0b'
-    }
+   
   ];
 
   // Handle quick action click
@@ -224,24 +268,30 @@ export default function AdminDashboard() {
   return (
     <div className="dashboard-container">
       {/* Header */}
-      <div className="dashboard-header">
-        <div className="header-content">
-          <h1>{getGreeting()}, {user?.name || 'Admin'}</h1>
-          <p className="subtitle">Welcome to Attendance Management System</p>
-        </div>
-        <div className="header-actions">
-          <button
-            className="refresh-btn"
-            onClick={loadDashboardData}
-            disabled={isLoading}
-          >
-            🔄 Refresh Data
-          </button>
-          <div className="last-updated">
-            Last updated: {lastUpdated}
-          </div>
-        </div>
+    <div className="dashboard-header">
+  <div className="header-content">
+    <h1>{getGreeting()}, {user?.name || 'Admin'}</h1>
+    <p className="subtitle">Welcome to Attendance Management System</p>
+  </div>
+  <div className="header-right">
+    <div className="user-profile">
+      <div className="user-avatar">
+        {user?.name?.charAt(0) || 'A'}
       </div>
+      <div className="user-info">
+        <span className="user-name">{user?.name || 'Admin'}</span>
+        <span className="user-role">Administrator</span>
+      </div>
+     <button
+  className="logout-btn-icon"
+  onClick={handleLogout}
+  title="Logout"
+>
+  <FontAwesomeIcon icon={faRightFromBracket} />
+</button>
+    </div>
+  </div>
+</div>
 
 
       {/* Stats Cards */}

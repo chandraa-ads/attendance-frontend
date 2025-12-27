@@ -17,15 +17,19 @@ import {
   Sparkles,
   FileDown,
   Zap,
-  TrendingUp
+  TrendingUp,
+  ChevronLeft
 } from 'lucide-react';
 import '../../assets/styles/Reports.css';
+import { useNavigate } from 'react-router-dom'; // Add this import
 
 export default function Reportss() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState('detailed');
   const [format, setFormat] = useState('pdf');
+    const navigate = useNavigate(); // Add this line
+
   const [dateRange, setDateRange] = useState({
     startDate: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
@@ -43,7 +47,7 @@ export default function Reportss() {
   const [quickReportLoading, setQuickReportLoading] = useState(null);
   const [availableDepartments, setAvailableDepartments] = useState([]);
 
-  const API_BASE_URL = 'https://attendance-backend-d4vi.onrender.com';
+  const API_BASE_URL = 'http://localhost:3000';
 
   // Fetch available departments on component mount
   useEffect(() => {
@@ -575,28 +579,52 @@ export default function Reportss() {
       <div className="notifications-container"></div>
 
       {/* Header */}
-      <div className="reports-header">
-        <div className="header-left">
-          <div className="header-icon">
-            <FileText size={32} />
-          </div>
-          <div className="header-title">
-            <h1>Attendance Reports</h1>
-            <p className="subtitle">Generate, analyze and download attendance reports</p>
-          </div>
-        </div>
-        <div className="header-right">
-          <div className="user-welcome">
-            <div className="user-avatar">
-              {user?.name?.charAt(0) || 'A'}
-            </div>
-            <div className="user-info">
-              <span className="greeting">Welcome back,</span>
-              <span className="username">{user?.name || 'Admin'}</span>
-            </div>
-          </div>
-        </div>
+      <div className="header-left">
+  {/* Simple Icon Back Button */}
+{/* Header */}
+<div className="reports-header">
+  <div className="header-left">
+    {/* Add Back Button Here */}
+    <button 
+      className="btn-back"
+      onClick={() => navigate(-1)}
+      title="Go back"
+    >
+      <ChevronLeft size={20} />
+      <span>Back</span>
+    </button>
+    
+    <div className="header-icon">
+      <FileText size={32} />
+    </div>
+    
+    <div className="header-title">
+      <h1>Attendance Reports</h1>
+      <p className="subtitle">Generate, analyze and download attendance reports</p>
+    </div>
+  </div>
+  <div className="header-right">
+    <div className="user-welcome">
+      <div className="user-avatar">
+        {user?.name?.charAt(0) || 'A'}
       </div>
+      <div className="user-info">
+        <span className="greeting">Welcome back,</span>
+        <span className="username">{user?.name || 'Admin'}</span>
+      </div>
+    </div>
+  </div>
+</div>
+  
+  <div className="header-icon">
+    <FileText size={32} />
+  </div>
+  
+  <div className="header-title">
+    <h1>Attendance Reports</h1>
+    <p className="subtitle">Generate, analyze and download attendance reports</p>
+  </div>
+</div>
 
       <div className="reports-content">
         {/* Left Column - Quick Reports */}

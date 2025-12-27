@@ -64,7 +64,7 @@ const handleSubmit = async (e) => {
       if (formData[key]) payload.append(key, formData[key]);
     });
 
-    const response = await fetch("https://attendance-backend-d4vi.onrender.com/auth/create-user", {
+    const response = await fetch("https://attendance-backend-d4vi.onrender.comauth/create-user", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`, // 🔑 include token for auth

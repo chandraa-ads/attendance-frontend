@@ -722,3 +722,76 @@
   cursor: not-allowed;
   opacity: 0.7;
 }
+
+/* Back Button Styles */
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-right: 16px;
+  height: fit-content;
+}
+
+.btn-back:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #334155;
+  transform: translateX(-2px);
+}
+
+.btn-back:active {
+  background: #e2e8f0;
+  transform: translateX(0);
+}
+
+.btn-back svg {
+  transition: transform 0.2s ease;
+}
+
+.btn-back:hover svg {
+  transform: translateX(-2px);
+}
+
+/* Update header-left layout */
+.reports-header .header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-icon {
+  margin-right: 12px;
+}
+
+.header-title h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.header-title .subtitle {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* Ensure proper spacing */
+.reports-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}

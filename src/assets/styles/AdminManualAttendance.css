@@ -596,8 +596,60 @@
 }
 
 /* Tables */
+/* Enhanced Table Container */
 .table-container {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  margin: 0 -24px; /* Remove card padding for full width scroll */
+  padding: 0 24px; /* Add padding back to content */
+}
+
+/* Force table to be wider than container */
+.attendance-table {
+  min-width: 1200px; /* Minimum width for the table */
+  width: 100%;
+}
+
+/* For viewer mode table */
+.records-table {
+  min-width: 1000px;
+  width: 100%;
+}
+
+/* Ensure table cells don't wrap unnecessarily */
+.attendance-table th,
+.attendance-table td,
+.records-table th,
+.records-table td {
+  white-space: nowrap;
+  min-width: 120px; /* Minimum cell width */
+}
+
+/* Adjust specific columns */
+.attendance-table th:nth-child(1), 
+.attendance-table td:nth-child(1) {
+  min-width: 60px;
+  width: 60px;
+}
+
+.attendance-table th:nth-child(2), 
+.attendance-table td:nth-child(2) {
+  min-width: 200px;
+}
+
+.attendance-table th:nth-child(5),
+.attendance-table td:nth-child(5) {
+  min-width: 150px;
+}
+
+.attendance-table th:nth-child(6),
+.attendance-table td:nth-child(6) {
+  min-width: 250px;
+}
+
+.attendance-table th:nth-child(7),
+.attendance-table td:nth-child(7) {
+  min-width: 100px;
 }
 
 .attendance-table,
@@ -1467,4 +1519,254 @@
 .bulk-info span {
   font-weight: 600;
   color: #0369a1;
+}
+
+
+/* Back Button Styles */
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  color: #495057;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-right: 16px;
+}
+
+.btn-back:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+  color: #212529;
+}
+
+.btn-back:active {
+  background: #dee2e6;
+  transform: translateY(1px);
+}
+
+.btn-back svg {
+  transition: transform 0.2s ease;
+}
+
+.btn-back:hover svg {
+  transform: translateX(-2px);
+}
+
+/* Update header-left layout */
+.dashboard-header .header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.header-title h1 {
+  margin-bottom: 4px;
+}
+
+.header-title p {
+  margin: 0;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+
+/* Scroll Indicator */
+.scroll-indicator {
+  background: linear-gradient(to right, #f8fafc, #e2e8f0, #f8fafc);
+  padding: 8px 16px;
+  text-align: center;
+  border-top: 1px solid #e2e8f0;
+  display: none; /* Hide by default, show only when needed */
+}
+
+.scroll-indicator-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: white;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.scroll-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Show scroll indicator on mobile/tablet */
+@media (max-width: 1024px) {
+  .scroll-indicator {
+    display: block;
+  }
+}
+
+
+
+/* FIX FOR TABLE HORIZONTAL SCROLL */
+.attendance-table-card {
+  overflow: visible !important;
+  position: relative;
+}
+
+.table-container-wrapper {
+  width: 100%;
+  overflow: visible;
+  position: relative;
+}
+
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom scrollbar */
+.table-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* FORCE TABLE TO BE WIDER THAN CONTAINER */
+.attendance-table {
+  min-width: 1200px;
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Set specific column widths */
+.attendance-table th:nth-child(1),
+.attendance-table td:nth-child(1) {
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+  position: sticky;
+  left: 0;
+  background: white;
+  z-index: 10;
+}
+
+.attendance-table th:nth-child(2),
+.attendance-table td:nth-child(2) {
+  width: 200px !important;
+  min-width: 200px !important;
+  max-width: 200px !important;
+  position: sticky;
+  left: 50px;
+  background: white;
+  z-index: 10;
+}
+
+.attendance-table th:nth-child(3),
+.attendance-table td:nth-child(3) {
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
+}
+
+.attendance-table th:nth-child(4),
+.attendance-table td:nth-child(4) {
+  width: 120px !important;
+  min-width: 120px !important;
+  max-width: 120px !important;
+}
+
+.attendance-table th:nth-child(5),
+.attendance-table td:nth-child(5) {
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
+}
+
+.attendance-table th:nth-child(6),
+.attendance-table td:nth-child(6) {
+  width: 250px !important;
+  min-width: 250px !important;
+  max-width: 250px !important;
+}
+
+.attendance-table th:nth-child(7),
+.attendance-table td:nth-child(7) {
+  width: 120px !important;
+  min-width: 120px !important;
+  max-width: 120px !important;
+}
+
+/* Ensure table cells don't wrap */
+.attendance-table th,
+.attendance-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+/* Remove any max-width constraints */
+.attendance-management,
+.dashboard-main,
+.attendance-table-card,
+.card-body {
+  max-width: none !important;
+  overflow: visible !important;
+}
+
+/* Add shadow to sticky columns */
+.attendance-table th:nth-child(2),
+.attendance-table td:nth-child(2) {
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+}
+
+/* Scroll indicator */
+.scroll-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(to right, transparent, #f8fafc, transparent);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  border-top: 1px solid #e2e8f0;
+}
+
+.scroll-hint svg {
+  animation: bounceHorizontal 2s infinite;
+}
+
+@keyframes bounceHorizontal {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(5px); }
 }

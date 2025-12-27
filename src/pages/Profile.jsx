@@ -553,7 +553,7 @@ const Profile = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch("https://attendance-backend-d4vi.onrender.com/auth/users");
+      const response = await fetch("https://attendance-backend-d4vi.onrender.comauth/users");
       if (response.ok) {
         const data = await response.json();
         setUsers(data);
@@ -627,15 +627,15 @@ const Profile = () => {
 
       switch (action) {
         case "create":
-          url = "https://attendance-backend-d4vi.onrender.com/auth/create-user";
+          url = "https://attendance-backend-d4vi.onrender.comauth/create-user";
           method = "POST";
           break;
         case "update":
-          url = `https://attendance-backend-d4vi.onrender.com/auth/update-user/${formData.employee_id}`;
+          url = `https://attendance-backend-d4vi.onrender.comauth/update-user/${formData.employee_id}`;
           method = "PUT";
           break;
         case "partial":
-          url = `https://attendance-backend-d4vi.onrender.com/auth/update-user/${formData.employee_id}`;
+          url = `https://attendance-backend-d4vi.onrender.comauth/update-user/${formData.employee_id}`;
           method = "PATCH";
           break;
         default:
@@ -674,7 +674,7 @@ const Profile = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        `https://attendance-backend-d4vi.onrender.com/auth/delete-user/${userToDelete.employee_id}`,
+        `https://attendance-backend-d4vi.onrender.comauth/delete-user/${userToDelete.employee_id}`,
         {
           method: "DELETE",
         }
