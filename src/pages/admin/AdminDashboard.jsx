@@ -23,7 +23,7 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState('');
 
-  const API_BASE_URL = 'http://localhost:3000';
+  const API_BASE_URL = 'https://attendance-backend-d4vi.onrender.com';
 // Handle logout
 const handleLogout = async () => {
   try {

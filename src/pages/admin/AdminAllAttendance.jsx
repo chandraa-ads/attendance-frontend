@@ -65,7 +65,292 @@ export default function AdminAllAttendance() {
     }
     return dates;
   };
+  // Add these helper functions before the return statement:
 
+
+  const handleExportUserSummaryPDF = () => {
+    try {
+      const perUserSummary = calculatePerUserSummary();
+      const overallStats = calculateOverallStats();
+
+      if (perUserSummary.length === 0) {
+        alert('No data to export!');
+        return;
+      }
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Title
+      doc.setFontSize(16);
+      doc.setTextColor(40, 40, 40);
+      doc.text('EMPLOYEE ATTENDANCE SUMMARY REPORT', 105, 20, null, null, 'center');
+
+      // Subtitle
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 105, 28, null, null, 'center');
+
+      // Filter info
+      let dateRange = '';
+      if (filters.date) {
+        dateRange = `Date: ${filters.date}`;
+      } else if (filters.startDate && filters.endDate) {
+        dateRange = `Date Range: ${filters.startDate} to ${filters.endDate}`;
+      } else {
+        dateRange = 'All Dates';
+      }
+
+      doc.text(dateRange, 105, 35, null, null, 'center');
+
+      // Overall Summary Box
+      doc.setFontSize(12);
+      doc.setTextColor(255, 255, 255);
+      doc.setFillColor(52, 152, 219);
+      doc.rect(20, 45, 170, 35, 'F');
+
+      doc.text('Overall Statistics', 25, 55);
+      doc.setFontSize(9);
+
+      const summaryItems = [
+        `Employees: ${perUserSummary.length}`,
+        `Date Range: ${filters.startDate && filters.endDate ? `${filters.startDate} to ${filters.endDate}` : filters.date || 'All dates'}`,
+        `Days with Records: ${overallStats.uniqueDatesCount}`,
+        `Total Records: ${overallStats.totalDaysWithRecords}`,
+        `Present Days: ${overallStats.totalPresent}`,
+        `Absent Days: ${overallStats.totalAbsent}`,
+        `Half Days: ${overallStats.totalHalfDays} (FN: ${overallStats.halfDayFN}, AN: ${overallStats.halfDayAN})`,
+        `Permission Days: ${overallStats.totalPermission}`,
+        `Avg Attendance Rate: ${overallStats.averageAttendanceRate}`
+      ];
+      // FIXED ALIGNMENT LOGIC
+      let sumX1 = 25;  // Column 1 X position
+      let sumX2 = 110; // Column 2 X position (25 + 85 = 110)
+      let sumY = 62;   // Starting Y position
+      doc.text(summaryItems[0], sumX1, sumY);
+      doc.text(summaryItems[1], sumX1, sumY + 7);
+
+      doc.text(summaryItems[2], sumX2, sumY);
+      doc.text(summaryItems[3], sumX2, sumY + 7);
+      doc.text(summaryItems[4], sumX2, sumY + 14);
+      // Per-User Summary Table
+      let tableY = 85;
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Employee-wise Attendance Breakdown', 20, tableY);
+      tableY += 8;
+
+      // Table headers
+      const headers = ['No.', 'Employee Name', 'Emp ID', 'Present', 'Absent', 'Half Days', 'Permission', 'Attendance %'];
+      const colWidths = [10, 45, 25, 15, 15, 20, 20, 20];
+
+      // Header background
+      doc.setFillColor(41, 128, 185);
+      doc.rect(20, tableY, colWidths.reduce((a, b) => a + b), 8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+
+      let headerX = 20;
+      headers.forEach((header, i) => {
+        doc.text(header, headerX + 2, tableY + 5);
+        headerX += colWidths[i];
+      });
+
+      tableY += 10;
+
+      // Table rows
+      doc.setTextColor(40, 40, 40);
+      doc.setFontSize(7);
+
+      perUserSummary.forEach((user, index) => {
+        // Check for page break
+        if (tableY > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          tableY = 20;
+
+          // Redraw header on new page
+          doc.setFillColor(41, 128, 185);
+          doc.rect(20, tableY, colWidths.reduce((a, b) => a + b), 8, 'F');
+          doc.setTextColor(255, 255, 255);
+
+          headerX = 20;
+          headers.forEach((header, i) => {
+            doc.text(header, headerX + 2, tableY + 5);
+            headerX += colWidths[i];
+          });
+
+          tableY += 10;
+          doc.setTextColor(40, 40, 40);
+        }
+
+        // Alternate row colors
+        if (index % 2 === 0) {
+          doc.setFillColor(245, 245, 245);
+          doc.rect(20, tableY, colWidths.reduce((a, b) => a + b), 7, 'F');
+        }
+
+        // Format half days
+        const halfDaysText = user.halfDays > 0 ?
+          `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` :
+          '0';
+
+        const userData = [
+          (index + 1).toString(),
+          user.name.length > 20 ? user.name.substring(0, 19) + '...' : user.name,
+          user.employeeId,
+          user.present.toString(),
+          user.absent.toString(),
+          halfDaysText,
+          user.permission.toString(),
+          `${user.attendanceRate}%`
+        ];
+
+        headerX = 20;
+        userData.forEach((cell, i) => {
+          // Color code attendance percentage
+          if (i === 7) {
+            const rate = parseFloat(user.attendanceRate);
+            if (rate >= 90) {
+              doc.setTextColor(46, 125, 50); // Green
+            } else if (rate >= 70) {
+              doc.setTextColor(245, 124, 0); // Orange
+            } else {
+              doc.setTextColor(211, 47, 47); // Red
+            }
+          } else {
+            doc.setTextColor(40, 40, 40);
+          }
+
+          doc.text(cell, headerX + 2, tableY + 5);
+          headerX += colWidths[i];
+        });
+
+        tableY += 7;
+      });
+
+      // Footer
+      const totalY = doc.internal.pageSize.height - 10;
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Total Employees: ${perUserSummary.length} | Generated on: ${new Date().toLocaleDateString()}`, 105, totalY, null, null, 'center');
+
+      // Save PDF
+      const filename = `employee-attendance-summary-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(filename);
+
+    } catch (err) {
+      console.error('Summary PDF error:', err);
+      alert('Error generating summary PDF: ' + err.message);
+    }
+  };
+  // Calculate per-user statistics
+  const calculatePerUserSummary = () => {
+    const userMap = {};
+
+    // Group data by user
+    filteredAttendance.forEach(record => {
+      const userId = record.user_id;
+      const userName = record.user_info?.name || 'Unknown';
+      const employeeId = record.user_info?.employee_id || 'N/A';
+
+      if (!userMap[userId]) {
+        userMap[userId] = {
+          name: userName,
+          employeeId: employeeId,
+          department: record.user_info?.designation || 'N/A',
+          present: 0,
+          absent: 0,
+          halfDays: 0,
+          halfDayFN: 0,
+          halfDayAN: 0,
+          permission: 0,
+          totalDays: 0, // Will only count days with records
+          totalWorkMinutes: 0,
+          uniqueDates: new Set() // Track unique dates for this user
+        };
+      }
+
+      const user = userMap[userId];
+
+      // Add date to unique dates set
+      if (record.date) {
+        user.uniqueDates.add(record.date);
+      }
+
+      user.totalDays++; // Only count this record as one day
+
+      // Check status
+      if (record.is_absent) {
+        user.absent++;
+      } else if (record.half_day_type) {
+        user.halfDays++;
+        if (record.half_day_type.includes('morning') || record.half_day_type.includes('FN') ||
+          record.half_day_type.includes('forenoon')) {
+          user.halfDayFN++;
+        } else if (record.half_day_type.includes('afternoon') || record.half_day_type.includes('AN')) {
+          user.halfDayAN++;
+        }
+      } else if (record.permission_time) {
+        user.permission++;
+      } else if (record.check_in && record.check_out) {
+        user.present++;
+        // Add work minutes if available
+        if (record.total_time_minutes) {
+          user.totalWorkMinutes += record.total_time_minutes;
+        }
+      }
+    });
+
+    // Convert to array and calculate statistics
+    return Object.values(userMap).map(user => {
+      const attendanceRate = user.totalDays > 0
+        ? ((user.present / user.totalDays) * 100).toFixed(1)
+        : '0.0';
+
+      const averageWorkHours = user.present > 0
+        ? (user.totalWorkMinutes / user.present / 60).toFixed(1)
+        : '0.0';
+
+      return {
+        ...user,
+        attendanceRate,
+        averageWorkHours,
+        uniqueDateCount: user.uniqueDates.size
+      };
+    }).sort((a, b) => b.attendanceRate - a.attendanceRate);
+  };
+  // Calculate overall statistics
+  const calculateOverallStats = () => {
+    const perUserSummary = calculatePerUserSummary();
+
+    const totalPresent = perUserSummary.reduce((sum, user) => sum + user.present, 0);
+    const totalAbsent = perUserSummary.reduce((sum, user) => sum + user.absent, 0);
+    const totalHalfDays = perUserSummary.reduce((sum, user) => sum + user.halfDays, 0);
+    const halfDayFN = perUserSummary.reduce((sum, user) => sum + user.halfDayFN, 0);
+    const halfDayAN = perUserSummary.reduce((sum, user) => sum + user.halfDayAN, 0);
+    const totalPermission = perUserSummary.reduce((sum, user) => sum + user.permission, 0);
+    const totalDaysWithRecords = perUserSummary.reduce((sum, user) => sum + user.totalDays, 0);
+    const uniqueDatesCount = new Set(
+      filteredAttendance.map(record => record.date)
+    ).size;
+
+    return {
+      totalPresent,
+      totalAbsent,
+      totalHalfDays,
+      halfDayFN,
+      halfDayAN,
+      totalPermission,
+      totalDaysWithRecords,
+      uniqueDatesCount,
+      averageAttendanceRate: perUserSummary.length > 0
+        ? (perUserSummary.reduce((sum, user) => sum + parseFloat(user.attendanceRate), 0) / perUserSummary.length).toFixed(1) + '%'
+        : '0%'
+    };
+  };
   const fetchAttendance = async () => {
     try {
       setLoading(true);
@@ -137,25 +422,40 @@ export default function AdminAllAttendance() {
         return;
       }
 
-      // ✅ Build minimal payload first
+      // ✅ Update the payload in generateBackendPDF function
       const payload = {
         reportType: 'detailed',
-        startDate: filters.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        endDate: filters.endDate || new Date().toISOString().split('T')[0]
+        startDate: filters.startDate || '',
+        endDate: filters.endDate || '',
+        // Add these for proper date range filtering
+        ...(filters.date && { day: filters.date }),
+        ...(filters.employeeId?.trim() && { employeeId: filters.employeeId }),
+        ...(filters.designation?.trim() && { designation: filters.designation }),
+        ...(filters.name?.trim() && { name: filters.name }),
+        ...(filters.status?.trim() && { status: filters.status }),
+        // Ensure we get user statistics
+        includeSummary: true,
+        groupByDepartment: false,
+        includeCharts: false
       };
 
-      // Only add filters if they have values
+      // Remove the default date if specific filters are set
       if (filters.date) {
-        payload.day = filters.date;
         delete payload.startDate;
         delete payload.endDate;
       }
 
-      if (filters.employeeId?.trim()) payload.employeeId = filters.employeeId;
-      if (filters.designation?.trim()) payload.designation = filters.designation;
+      if (!payload.startDate && !payload.endDate && !payload.day) {
+        // Default to last 30 days if no date specified
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
 
-      console.log('📄 Backend PDF Payload (simplified):', payload);
+        payload.startDate = startDate.toISOString().split('T')[0];
+        payload.endDate = endDate.toISOString().split('T')[0];
+      }
 
+      console.log('📄 Backend PDF Payload:', payload);
       // Test the endpoint first with a simple GET request
       try {
         const testResponse = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/test', {
@@ -322,13 +622,12 @@ export default function AdminAllAttendance() {
     handleClientSidePDF();
   };
 
-  // Add this new function for client-side PDF
-  // Simple client-side PDF without autoTable plugin
+  // Simplified PDF with per-user summary
   const handleClientSidePDF = () => {
     try {
       if (filteredAttendance.length === 0) {
         alert('No data to export!');
-        return;
+        return false;
       }
 
       const doc = new jsPDF({
@@ -340,9 +639,9 @@ export default function AdminAllAttendance() {
       // Title
       doc.setFontSize(18);
       doc.setTextColor(40, 40, 40);
-      doc.text('ATTENDANCE REPORT', 105, 20, null, null, 'center');
+      doc.text('EMPLOYEE ATTENDANCE SUMMARY REPORT', 105, 20, null, null, 'center');
 
-      // Subtitle
+      // Date info
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.text(`Generated: ${new Date().toLocaleString()}`, 105, 28, null, null, 'center');
@@ -353,156 +652,146 @@ export default function AdminAllAttendance() {
       if (filters.startDate && filters.endDate) {
         filterInfo += `Range: ${filters.startDate} to ${filters.endDate} | `;
       }
-      if (filters.name) filterInfo += `Name: ${filters.name} | `;
-      if (filters.status) filterInfo += `Status: ${filters.status} | `;
 
       if (filterInfo) {
-        filterInfo = filterInfo.slice(0, -3); // Remove last " | "
+        filterInfo = filterInfo.slice(0, -3);
         doc.setFontSize(9);
         doc.text(filterInfo, 105, 35, null, null, 'center');
       }
 
+      // ==================== PER-USER SUMMARY TABLE ====================
+      const perUserSummary = calculatePerUserSummary();
+      const overallStats = calculateOverallStats();
+
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'bold');
+      doc.text('EMPLOYEE-WISE ATTENDANCE SUMMARY', 20, 50);
+
       // Table headers
-      const headers = [
-        { text: 'Date', x: 10, width: 25 },
-        { text: 'Emp ID', x: 35, width: 25 },
-        { text: 'Name', x: 60, width: 40 },
-        { text: 'Dept', x: 100, width: 30 },
-        { text: 'Check In', x: 130, width: 25 },
-        { text: 'Check Out', x: 155, width: 25 },
-        { text: 'Total Time', x: 180, width: 25 },
-        { text: 'Status', x: 205, width: 30 },
-        { text: 'Type', x: 235, width: 20 }
-      ];
+      const headers = ['Employee Name', 'Emp ID', 'Present', 'Absent', 'Half Days', 'Permission', 'Attendance %'];
+      const colWidths = [50, 25, 15, 15, 25, 20, 25];
 
-      // Draw header background
-      doc.setFillColor(41, 128, 185);
-      doc.rect(10, 40, 250, 8, 'F');
+      let y = 60;
 
-      // Draw header text
-      doc.setFontSize(9);
+      // Draw header
+      doc.setFillColor(52, 152, 219);
+      doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
       doc.setTextColor(255, 255, 255);
-      headers.forEach(header => {
-        doc.text(header.text, header.x + 2, 45);
+      doc.setFontSize(9);
+
+      let xPos = 20;
+      headers.forEach((header, i) => {
+        doc.text(header, xPos + 2, y + 5);
+        xPos += colWidths[i];
       });
 
-      // Draw table rows
-      let y = 50;
-      const rowHeight = 8;
-      const pageHeight = doc.internal.pageSize.height;
+      y += 10;
 
-      filteredAttendance.forEach((record, index) => {
+      // Draw user data
+      doc.setTextColor(40, 40, 40);
+      doc.setFontSize(8);
+
+      perUserSummary.forEach((user, index) => {
         // Check for page break
-        if (y > pageHeight - 20) {
+        if (y > doc.internal.pageSize.height - 20) {
           doc.addPage();
           y = 20;
 
-          // Redraw headers on new page
-          doc.setFillColor(41, 128, 185);
-          doc.rect(10, y, 250, 8, 'F');
+          // Redraw header on new page
+          doc.setFillColor(52, 152, 219);
+          doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
           doc.setTextColor(255, 255, 255);
-          headers.forEach(header => {
-            doc.text(header.text, header.x + 2, y + 5);
+
+          xPos = 20;
+          headers.forEach((header, i) => {
+            doc.text(header, xPos + 2, y + 5);
+            xPos += colWidths[i];
           });
-          y += rowHeight + 2;
+
+          y += 10;
+          doc.setTextColor(40, 40, 40);
         }
 
         // Alternate row colors
         if (index % 2 === 0) {
           doc.setFillColor(245, 245, 245);
-          doc.rect(10, y, 250, rowHeight, 'F');
+          doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
         }
 
-        // Set text color
-        doc.setTextColor(40, 40, 40);
-        doc.setFontSize(8);
+        // Format half days as "FN/AN"
+        const halfDaysText = user.halfDays > 0 ?
+          `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` :
+          user.halfDays.toString();
 
-        // Draw row data
-        const rowData = [
-          record.date,
-          record.user_info?.employee_id || '-',
-          record.user_info?.name?.substring(0, 15) + (record.user_info?.name?.length > 15 ? '...' : '') || '-',
-          record.user_info?.designation?.substring(0, 10) + (record.user_info?.designation?.length > 10 ? '...' : '') || '-',
-          formatTime(record.check_in),
-          formatTime(record.check_out),
-          record.total_time_formatted || '-',
-          getStatus(record),
-          record.manual_entry ? 'Manual' : 'Auto'
+        const userData = [
+          user.name.length > 15 ? user.name.substring(0, 14) + '...' : user.name,
+          user.employeeId,
+          user.present.toString(),
+          user.absent.toString(),
+          halfDaysText,
+          user.permission.toString(),
+          `${user.attendanceRate}%`
         ];
 
-        headers.forEach((header, i) => {
-          const text = String(rowData[i]);
-          // Trim text if too long
-          const maxChars = Math.floor(header.width / 1.5);
-          const displayText = text.length > maxChars ? text.substring(0, maxChars - 1) + '...' : text;
+        xPos = 20;
+        userData.forEach((cell, i) => {
+          // Color code attendance percentage
+          if (i === 6) {
+            const rate = parseFloat(user.attendanceRate);
+            if (rate >= 90) {
+              doc.setTextColor(46, 125, 50); // Green
+            } else if (rate >= 70) {
+              doc.setTextColor(245, 124, 0); // Orange
+            } else {
+              doc.setTextColor(211, 47, 47); // Red
+            }
+          } else {
+            doc.setTextColor(40, 40, 40);
+          }
 
-          doc.text(displayText, header.x + 2, y + 5);
+          doc.text(cell.toString(), xPos + 2, y + 5);
+          xPos += colWidths[i];
         });
 
-        y += rowHeight;
+        y += 8;
       });
 
-      // Add summary
-      const finalY = y + 10;
-      if (finalY < pageHeight - 30) {
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0);
-        doc.setFont(undefined, 'bold');
-        doc.text('SUMMARY', 10, finalY);
-        doc.setFont(undefined, 'normal');
+      // ==================== OVERALL SUMMARY ====================
+      y += 10;
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'bold');
+      doc.text('OVERALL SUMMARY STATISTICS', 20, y);
 
-        const presentCount = filteredAttendance.filter(a => !a.is_absent && a.check_in).length;
-        const absentCount = filteredAttendance.filter(a => a.is_absent).length;
-        const halfDayCount = filteredAttendance.filter(a => a.check_in && !a.check_out).length;
-        const manualCount = filteredAttendance.filter(a => a.manual_entry).length;
-        const autoCount = filteredAttendance.filter(a => !a.manual_entry).length;
+      y += 10;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
 
-        doc.setFontSize(9);
-        doc.text(`Total Records: ${filteredAttendance.length}`, 10, finalY + 7);
-        doc.text(`Present: ${presentCount}`, 60, finalY + 7);
-        doc.text(`Absent: ${absentCount}`, 100, finalY + 7);
-        doc.text(`Half Days: ${halfDayCount}`, 140, finalY + 7);
-        doc.text(`Manual Entries: ${manualCount}`, 180, finalY + 7);
-        doc.text(`Auto Entries: ${autoCount}`, 220, finalY + 7);
-      }
+      const summaryLines = [
+        `• Total Employees: ${perUserSummary.length}`,
+        `• Date Range: ${filters.startDate && filters.endDate ? `${filters.startDate} to ${filters.endDate}` : filters.date || 'All dates'}`,
+        `• Total Present Days: ${overallStats.totalPresent}`,
+        `• Total Absent Days: ${overallStats.totalAbsent}`,
+        `• Total Half Days: ${overallStats.totalHalfDays} (FN: ${overallStats.halfDayFN}, AN: ${overallStats.halfDayAN})`,
+        `• Total Permission Days: ${overallStats.totalPermission}`,
+        `• Total Records Analyzed: ${filteredAttendance.length}`
+      ];
+
+      summaryLines.forEach((line, index) => {
+        doc.text(line, 25, y + (index * 6));
+      });
 
       // Save the PDF
-      const filename = `attendance-report-${filters.date || 'all'}-${new Date().toISOString().split('T')[0]}.pdf`;
+      const filename = `employee-attendance-summary-${filters.date || 'all'}-${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(filename);
 
-      console.log(`Client PDF exported: ${filteredAttendance.length} records`);
       return true;
 
     } catch (err) {
-      console.error('Client-side PDF error:', err);
-
-      // Try a simpler approach as fallback
-      try {
-        // Simple text-based PDF as last resort
-        const simpleDoc = new jsPDF();
-        simpleDoc.text('Attendance Report', 20, 20);
-        simpleDoc.text(`Generated: ${new Date().toLocaleString()}`, 20, 30);
-        simpleDoc.text(`Total Records: ${filteredAttendance.length}`, 20, 40);
-
-        let y = 50;
-        filteredAttendance.slice(0, 30).forEach((record, index) => {
-          if (y > 280) return; // Stop if page is full
-          simpleDoc.text(
-            `${record.date} - ${record.user_info?.name || 'Unknown'} - ${getStatus(record)}`,
-            20, y
-          );
-          y += 7;
-        });
-
-        const filename = `simple-attendance-${new Date().toISOString().slice(0, 10)}.pdf`;
-        simpleDoc.save(filename);
-        alert('Generated a simplified PDF report');
-        return true;
-      } catch (simpleErr) {
-        console.error('Simple PDF also failed:', simpleErr);
-        alert('Failed to generate PDF. Please try CSV or Excel export instead.');
-        return false;
-      }
+      console.error('PDF generation error:', err);
+      alert('Error generating PDF: ' + err.message);
+      return false;
     }
   };
 
@@ -894,6 +1183,9 @@ export default function AdminAllAttendance() {
             >
               📄 Quick PDF
             </button>
+            <button onClick={handleExportUserSummaryPDF} className="export-btn summary-pdf" title="Export Employee Summary PDF">
+              👥 Employee Summary PDF
+            </button>
           </div>
           <button onClick={handleExportSummary} className="export-btn summary" title="Export Summary Report">
             📈 Summary Report
@@ -1202,34 +1494,91 @@ export default function AdminAllAttendance() {
         )}
       </div>
 
-      {/* Summary Section */}
-      <div className="summary-section">
-        <h2>Summary</h2>
-        <div className="summary-grid">
-          <div className="summary-item">
-            <h3>Attendance Distribution</h3>
-            <p>Present: {filteredAttendance.filter(a => !a.is_absent && a.check_in).length}</p>
-            <p>Absent: {filteredAttendance.filter(a => a.is_absent).length}</p>
-            <p>Half Days: {filteredAttendance.filter(a => a.check_in && !a.check_out).length}</p>
-          </div>
-          <div className="summary-item">
-            <h3>Manual vs Auto</h3>
-            <p>Manual Entries: {filteredAttendance.filter(a => a.manual_entry).length}</p>
-            <p>Auto Entries: {filteredAttendance.filter(a => !a.manual_entry).length}</p>
-          </div>
-          <div className="summary-item">
-            <h3>Date Range Analysis</h3>
-            <p>
-              From: {filteredAttendance.length > 0
-                ? filteredAttendance[filteredAttendance.length - 1].date
-                : 'N/A'}
-            </p>
-            <p>
-              To: {filteredAttendance.length > 0
-                ? filteredAttendance[0].date
-                : 'N/A'}
-            </p>
-            <p>Total Days: {new Set(filteredAttendance.map(a => a.date)).size}</p>
+      {/* Per-User Summary Section */}
+      <div className="per-user-summary-section">
+        <h2>📊 Employee-wise Summary</h2>
+        <div className="per-user-summary-table">
+          <table className="summary-table">
+            <thead>
+              <tr>
+                <th>Employee Name</th>
+                <th>Emp ID</th>
+                <th>Present</th>
+                <th>Absent</th>
+                <th>Half Days</th>
+                <th>Permission</th>
+                <th>Attendance %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAttendance.length > 0 ? (
+                calculatePerUserSummary().slice(0, 10).map((user, index) => (
+                  <tr key={`${user.employeeId}-${index}`}>
+                    <td>{user.name}</td>
+                    <td>{user.employeeId}</td>
+                    <td className={user.present > 0 ? 'present-cell' : ''}>{user.present}</td>
+                    <td className={user.absent > 0 ? 'absent-cell' : ''}>{user.absent}</td>
+                    <td className={user.halfDays > 0 ? 'halfday-cell' : ''}>
+                      {user.halfDays} ({user.halfDayFN}FN/{user.halfDayAN}AN)
+                    </td>
+                    <td className={user.permission > 0 ? 'permission-cell' : ''}>{user.permission}</td>
+                    <td className={`attendance-cell ${user.attendanceRate >= 90 ? 'excellent' : user.attendanceRate >= 70 ? 'good' : 'poor'}`}>
+                      {user.attendanceRate}%
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="7" className="no-data">
+                    No data available
+                  </td>
+                </tr>
+              )}
+              {calculatePerUserSummary().length > 10 && (
+                <tr>
+                  <td colSpan="7" className="more-users">
+                    ... and {calculatePerUserSummary().length - 10} more employees
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Overall Summary */}
+        <div className="overall-summary-box">
+          <h3>📈 Overall Summary</h3>
+          <div className="overall-stats">
+            <div className="stat-item">
+              <span className="stat-label">Total Employees:</span>
+              <span className="stat-value">{calculatePerUserSummary().length}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Date Range:</span>
+              <span className="stat-value">
+                {filters.startDate && filters.endDate
+                  ? `${filters.startDate} to ${filters.endDate}`
+                  : filters.date || 'All dates'}
+              </span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Total Present Days:</span>
+              <span className="stat-value">{calculateOverallStats().totalPresent}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Total Absent Days:</span>
+              <span className="stat-value">{calculateOverallStats().totalAbsent}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Total Half Days:</span>
+              <span className="stat-value">
+                {calculateOverallStats().totalHalfDays} (FN: {calculateOverallStats().halfDayFN}, AN: {calculateOverallStats().halfDayAN})
+              </span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Total Permission Days:</span>
+              <span className="stat-value">{calculateOverallStats().totalPermission}</span>
+            </div>
           </div>
         </div>
       </div>

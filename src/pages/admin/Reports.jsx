@@ -47,7 +47,7 @@ export default function Reportss() {
   const [quickReportLoading, setQuickReportLoading] = useState(null);
   const [availableDepartments, setAvailableDepartments] = useState([]);
 
-  const API_BASE_URL = 'http://localhost:3000';
+  const API_BASE_URL = 'https://attendance-backend-d4vi.onrender.com';
 
   // Fetch available departments on component mount
   useEffect(() => {

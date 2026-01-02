@@ -1131,3 +1131,139 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Per-User Summary Styles */
+.per-user-summary-section {
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.per-user-summary-section h2 {
+  margin-bottom: 20px;
+  color: #2c3e50;
+  font-size: 1.5rem;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.summary-table th {
+  background: #3498db;
+  color: white;
+  padding: 12px 15px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.summary-table td {
+  padding: 10px 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.summary-table tr:hover {
+  background: #f8f9fa;
+}
+
+/* Cell color coding */
+.present-cell {
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.absent-cell {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.halfday-cell {
+  color: #f39c12;
+  font-weight: bold;
+}
+
+.permission-cell {
+  color: #9b59b6;
+  font-weight: bold;
+}
+
+.attendance-cell.excellent {
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.attendance-cell.good {
+  color: #f39c12;
+  font-weight: bold;
+}
+
+.attendance-cell.poor {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.no-data {
+  text-align: center;
+  color: #7f8c8d;
+  font-style: italic;
+  padding: 20px;
+}
+
+.more-users {
+  text-align: center;
+  color: #7f8c8d;
+  font-style: italic;
+  padding: 10px;
+}
+
+/* Overall Summary Box */
+.overall-summary-box {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  border-left: 4px solid #3498db;
+}
+
+.overall-summary-box h3 {
+  margin-bottom: 15px;
+  color: #2c3e50;
+}
+
+.overall-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.stat-item:last-child {
+  border-bottom: none;
+}
+
+.stat-label {
+  color: #555;
+  font-weight: 500;
+}
+
+.stat-value {
+  color: #2c3e50;
+  font-weight: 600;
+}.export-btn.summary-pdf {
+  background: linear-gradient(135deg, #9C27B0 0%, #673AB7 100%);
+  color: white;
+}
+
+.export-btn.summary-pdf:hover {
+  background: linear-gradient(135deg, #7B1FA2 0%, #512DA8 100%);
+}
+
