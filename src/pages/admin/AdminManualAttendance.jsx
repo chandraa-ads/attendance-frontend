@@ -26,7 +26,9 @@ import {
   BarChart2,
   MoreVertical,
   CheckSquare,
-  Square
+  Square,
+  Sun,
+  Moon
 } from 'lucide-react';
 import '../../assets/styles/AdminManualAttendance.css';
 
@@ -48,10 +50,22 @@ export default function AdminManualAttendance() {
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [viewMode, setViewMode] = useState('marker'); // 'marker' or 'viewer'
 
+  // Holiday states
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+  const [holidayDate, setHolidayDate] = useState(new Date().toISOString().split('T')[0]);
+  const [holidayReason, setHolidayReason] = useState('Public Holiday');
+  const [holidayAction, setHolidayAction] = useState('today'); // 'today' or 'specific'
+
   // Permission states
   const [permissionFrom, setPermissionFrom] = useState('');
   const [permissionTo, setPermissionTo] = useState('');
   const [permissionReason, setPermissionReason] = useState('');
+
+  // API Base URL
+  const API_BASE_URL = process.env.NODE_ENV === 'development' 
+  ? 'https://attendance-backend-d4vi.onrender.com' // Use production URL even in development
+  : 'https://attendance-backend-d4vi.onrender.com';
+
   // Handle permission submission
   const handlePermissionSubmit = async (userId) => {
     if (!permissionFrom || !permissionTo) {
@@ -92,7 +106,7 @@ export default function AdminManualAttendance() {
       }
 
       // Send request to permission endpoint
-      const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+      const response = await fetch(`${API_BASE_URL}/attendance/permission`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,7 +149,6 @@ export default function AdminManualAttendance() {
       setLoading(false);
     }
   };
-
 
   // Handle bulk permission for multiple users
   const handleBulkPermission = async () => {
@@ -195,7 +208,7 @@ export default function AdminManualAttendance() {
             });
           }
 
-          const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+          const response = await fetch(`${API_BASE_URL}/attendance/permission`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -253,6 +266,71 @@ export default function AdminManualAttendance() {
     } catch (err) {
       console.error("Bulk permission error:", err);
       showMessage('Error: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle mark as holiday
+  const handleMarkAsHoliday = async () => {
+    try {
+      const dateToMark = holidayAction === 'today' ? new Date().toISOString().split('T')[0] : holidayDate;
+      
+      const confirm = window.confirm(
+        `Are you sure you want to mark ${dateToMark} as a holiday for ALL employees?\n\n` +
+        `Reason: ${holidayReason}\n` +
+        `This will override any existing attendance for that date.`
+      );
+      
+      if (!confirm) return;
+      
+      const token = getToken();
+      if (!token) return;
+      
+      setLoading(true);
+      
+      const response = await fetch(
+        `${API_BASE_URL}/attendance/mark-holiday`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            date: dateToMark,
+            reason: holidayReason,
+            userIds: selectedUsers.length > 0 ? selectedUsers : undefined // Optional: mark only selected users
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to mark holiday');
+      }
+      
+      const result = await response.json();
+      
+      showMessage(
+        `✅ Successfully marked ${dateToMark} as holiday for ${result.affected_users} employees`,
+        'success'
+      );
+      
+      // Refresh the attendance data
+      if (dateToMark === selectedDate) {
+        await fetchExistingAttendance();
+      }
+      
+      if (viewMode === 'viewer') {
+        await fetchAllAttendance();
+      }
+      
+      setShowHolidayModal(false);
+      
+    } catch (err) {
+      console.error('Error marking holiday:', err);
+      showMessage('Error marking holiday: ' + err.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -318,7 +396,9 @@ export default function AdminManualAttendance() {
     absent: 0,
     halfDay: 0,
     permission: 0,
-    pending: 0
+    pending: 0,
+    holiday: 0,
+    total: 0
   });
 
   // Get token from localStorage
@@ -351,7 +431,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch('https://attendance-backend-d4vi.onrender.com/auth/users', {
+      const res = await fetch(`${API_BASE_URL}/auth/users`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -390,6 +470,7 @@ export default function AdminManualAttendance() {
       absent: 0,
       halfDay: 0,
       permission: 0,
+      holiday: 0,
       pending: 0,
       total: usersData.length
     };
@@ -409,6 +490,9 @@ export default function AdminManualAttendance() {
         case 'permission':
           newStats.permission++;
           break;
+        case 'holiday':
+          newStats.holiday++;
+          break;
         case 'pending':
           newStats.pending++;
           break;
@@ -424,7 +508,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      const res = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${selectedDate}`, {
+      const res = await fetch(`${API_BASE_URL}/attendance/all?date=${selectedDate}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -441,12 +525,14 @@ export default function AdminManualAttendance() {
             status: record.is_absent ? 'absent' :
               record.half_day_type ? `half-day-${record.half_day_type}` :
                 record.permission_time ? 'permission' :
+                  record.is_holiday ? 'holiday' :
                   (record.check_in && !record.check_out ? 'checked-in' :
                     (record.check_in && record.check_out ? 'present' : 'pending')),
             record: record,
             half_day_type: record.half_day_type,
             permission_time: record.permission_time,
             permission_reason: record.permission_reason,
+            is_holiday: record.is_holiday,
             notes: record.notes
           };
         });
@@ -468,7 +554,9 @@ export default function AdminManualAttendance() {
       if (existing) {
         records[user.id] = {
           status: existing.is_absent ? 'absent' :
-            existing.half_day_type ? `half-day-${existing.half_day_type}` : 'present',
+            existing.half_day_type ? `half-day-${existing.half_day_type}` :
+              existing.is_holiday ? 'holiday' :
+              existing.permission_time ? 'permission' : 'present',
           checkIn: existing.check_in ?
             new Date(existing.check_in).toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' }) :
             '09:30',
@@ -479,6 +567,7 @@ export default function AdminManualAttendance() {
           halfDayType: existing.half_day_type || '',
           permissionTime: existing.permission_time || '',
           permissionReason: existing.permission_reason || '',
+          isHoliday: existing.is_holiday || false,
           notes: existing.notes || '',
           manualEntry: existing.manual_entry || true,
           alreadyMarked: true,
@@ -493,6 +582,7 @@ export default function AdminManualAttendance() {
           halfDayType: '',
           permissionTime: '',
           permissionReason: '',
+          isHoliday: false,
           notes: '',
           manualEntry: true,
           alreadyMarked: false,
@@ -511,7 +601,7 @@ export default function AdminManualAttendance() {
       const token = getToken();
       if (!token) return;
 
-      let url = 'https://attendance-backend-d4vi.onrender.com/attendance/filter?';
+      let url = `${API_BASE_URL}/attendance/filter?`;
       const params = [];
 
       if (filters.startDate) params.push(`startDate=${filters.startDate}`);
@@ -554,7 +644,8 @@ export default function AdminManualAttendance() {
       attendanceType: existing ?
         (existing.record.is_absent ? 'absent' :
           existing.record.permission_time ? 'permission' :
-            existing.record.half_day_type ? 'half-day' : 'present') : 'present',
+            existing.record.half_day_type ? 'half-day' :
+              existing.record.is_holiday ? 'holiday' : 'present') : 'present',
       checkIn: existing?.record.check_in ?
         new Date(existing.record.check_in).toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '09:30',
       checkOut: existing?.record.check_out ?
@@ -570,6 +661,7 @@ export default function AdminManualAttendance() {
       permissionTo: existing?.record.permission_time ?
         existing.record.permission_time.split('-')[1]?.trim() : '',
       permissionReason: existing?.record.permission_reason || '',
+      isHoliday: existing?.record.is_holiday || false,
       notes: existing?.record.notes || ''
     });
 
@@ -654,16 +746,18 @@ export default function AdminManualAttendance() {
           payload.halfDayType = null;
           payload.permissionTime = null;
           payload.permissionReason = null;
+          payload.isHoliday = false;
           break;
 
         case 'absent':
           payload.isAbsent = true;
           payload.absenceReason = editAttendanceData.absenceReason.trim();
-          payload.checkIn = null; // No time needed for absent
-          payload.checkOut = null; // No time needed for absent
+          payload.checkIn = null;
+          payload.checkOut = null;
           payload.halfDayType = null;
           payload.permissionTime = null;
           payload.permissionReason = null;
+          payload.isHoliday = false;
           break;
 
         case 'half-day':
@@ -673,15 +767,28 @@ export default function AdminManualAttendance() {
           payload.checkOut = editAttendanceData.halfDayCheckOut;
           payload.permissionTime = null;
           payload.permissionReason = null;
+          payload.isHoliday = false;
           break;
 
         case 'permission':
           payload.isAbsent = false;
-          payload.checkIn = null; // Not required for permission
-          payload.checkOut = null; // Not required for permission
+          payload.checkIn = null;
+          payload.checkOut = null;
           payload.permissionTime = `${editAttendanceData.permissionFrom}-${editAttendanceData.permissionTo}`;
           payload.permissionReason = editAttendanceData.permissionReason.trim();
           payload.halfDayType = null;
+          payload.isHoliday = false;
+          break;
+
+        case 'holiday':
+          payload.isHoliday = true;
+          payload.isAbsent = false;
+          payload.checkIn = null;
+          payload.checkOut = null;
+          payload.absenceReason = 'Holiday';
+          payload.halfDayType = null;
+          payload.permissionTime = null;
+          payload.permissionReason = null;
           break;
       }
 
@@ -692,7 +799,7 @@ export default function AdminManualAttendance() {
 
       // Check if record already exists
       let existingRecordId = null;
-      const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${editAttendanceData.date}`, {
+      const resCheck = await fetch(`${API_BASE_URL}/attendance/all?date=${editAttendanceData.date}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -709,7 +816,7 @@ export default function AdminManualAttendance() {
       let response;
       if (existingRecordId) {
         // Update existing record
-        response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existingRecordId}`, {
+        response = await fetch(`${API_BASE_URL}/attendance/update/${existingRecordId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -718,9 +825,8 @@ export default function AdminManualAttendance() {
           body: JSON.stringify(payload),
         });
       } else {
-        // Create new record
         if (editAttendanceData.attendanceType === 'permission') {
-          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+          response = await fetch(`${API_BASE_URL}/attendance/permission`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -736,7 +842,7 @@ export default function AdminManualAttendance() {
             }),
           });
         } else {
-          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
+          response = await fetch(`${API_BASE_URL}/attendance/manual`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -811,6 +917,7 @@ export default function AdminManualAttendance() {
               payload.halfDayType = null;
               payload.permissionTime = null;
               payload.permissionReason = null;
+              payload.isHoliday = false;
               break;
 
             case 'absent':
@@ -821,6 +928,7 @@ export default function AdminManualAttendance() {
               payload.halfDayType = null;
               payload.permissionTime = null;
               payload.permissionReason = null;
+              payload.isHoliday = false;
               break;
 
             case 'half-day':
@@ -835,6 +943,7 @@ export default function AdminManualAttendance() {
               }
               payload.permissionTime = null;
               payload.permissionReason = null;
+              payload.isHoliday = false;
               break;
 
             case 'permission':
@@ -844,12 +953,24 @@ export default function AdminManualAttendance() {
               payload.permissionTime = `${bulkEditData.permissionFrom}-${bulkEditData.permissionTo}`;
               payload.permissionReason = bulkEditData.permissionReason;
               payload.halfDayType = null;
+              payload.isHoliday = false;
+              break;
+
+            case 'holiday':
+              payload.isHoliday = true;
+              payload.isAbsent = false;
+              payload.checkIn = null;
+              payload.checkOut = null;
+              payload.absenceReason = 'Holiday';
+              payload.halfDayType = null;
+              payload.permissionTime = null;
+              payload.permissionReason = null;
               break;
           }
 
           // Check if record exists
           let existingRecordId = null;
-          const resCheck = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/all?date=${bulkEditData.date}`, {
+          const resCheck = await fetch(`${API_BASE_URL}/attendance/all?date=${bulkEditData.date}`, {
             headers: {
               'Authorization': `Bearer ${token}`
             },
@@ -865,7 +986,7 @@ export default function AdminManualAttendance() {
 
           let response;
           if (existingRecordId) {
-            response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existingRecordId}`, {
+            response = await fetch(`${API_BASE_URL}/attendance/update/${existingRecordId}`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -875,7 +996,7 @@ export default function AdminManualAttendance() {
             });
           } else {
             if (bulkEditData.attendanceType === 'permission') {
-              response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+              response = await fetch(`${API_BASE_URL}/attendance/permission`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -893,7 +1014,7 @@ export default function AdminManualAttendance() {
                 }),
               });
             } else {
-              response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
+              response = await fetch(`${API_BASE_URL}/attendance/manual`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -1062,6 +1183,7 @@ export default function AdminManualAttendance() {
           payload.halfDayType = null;
           payload.permissionTime = null;
           payload.permissionReason = null;
+          payload.isHoliday = false;
           break;
 
         case 'absent':
@@ -1072,6 +1194,7 @@ export default function AdminManualAttendance() {
           payload.halfDayType = null;
           payload.permissionTime = null;
           payload.permissionReason = null;
+          payload.isHoliday = false;
           break;
 
         case 'half-day-morning':
@@ -1083,16 +1206,29 @@ export default function AdminManualAttendance() {
           payload.absenceReason = null;
           payload.permissionTime = null;
           payload.permissionReason = null;
+          payload.isHoliday = false;
           break;
 
         case 'permission':
           payload.isAbsent = false;
           payload.permissionTime = record.permissionTime;
           payload.permissionReason = record.permissionReason.trim();
-          payload.checkIn = null; // Not required for permission
-          payload.checkOut = null; // Not required for permission
+          payload.checkIn = null;
+          payload.checkOut = null;
           payload.absenceReason = null;
           payload.halfDayType = null;
+          payload.isHoliday = false;
+          break;
+
+        case 'holiday':
+          payload.isHoliday = true;
+          payload.isAbsent = false;
+          payload.checkIn = null;
+          payload.checkOut = null;
+          payload.absenceReason = 'Holiday';
+          payload.halfDayType = null;
+          payload.permissionTime = null;
+          payload.permissionReason = null;
           break;
       }
 
@@ -1101,7 +1237,7 @@ export default function AdminManualAttendance() {
       let response;
 
       if (existing && existing.recordId) {
-        response = await fetch(`https://attendance-backend-d4vi.onrender.com/attendance/update/${existing.recordId}`, {
+        response = await fetch(`${API_BASE_URL}/attendance/update/${existing.recordId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -1113,7 +1249,7 @@ export default function AdminManualAttendance() {
         // For permission, use permission endpoint
         if (record.status === 'permission') {
           const [permissionFrom, permissionTo] = record.permissionTime.split('-');
-          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/permission', {
+          response = await fetch(`${API_BASE_URL}/attendance/permission`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1128,7 +1264,7 @@ export default function AdminManualAttendance() {
             }),
           });
         } else {
-          response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/manual', {
+          response = await fetch(`${API_BASE_URL}/attendance/manual`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1188,6 +1324,7 @@ export default function AdminManualAttendance() {
             userId: userId,
             date: selectedDate,
             isAbsent: record.status === 'absent',
+            isHoliday: record.status === 'holiday',
             absenceReason: record.status === 'absent' ? record.absenceReason.trim() : null,
             checkIn: ['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status) ? record.checkIn || null : null,
             checkOut: ['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status) ? record.checkOut || null : null
@@ -1222,7 +1359,7 @@ export default function AdminManualAttendance() {
       setLoading(true);
 
       // Bulk API call
-      const response = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/bulk', {
+      const response = await fetch(`${API_BASE_URL}/attendance/bulk`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1281,7 +1418,7 @@ export default function AdminManualAttendance() {
     const headers = [
       'Date', 'Employee ID', 'Name', 'Department', 'Designation',
       'Check In', 'Check Out', 'Status', 'Absence Reason', 'Half Day Type',
-      'Permission Time', 'Permission Reason', 'Notes'
+      'Permission Time', 'Permission Reason', 'Is Holiday', 'Notes'
     ];
 
     const csvContent = [
@@ -1299,6 +1436,7 @@ export default function AdminManualAttendance() {
         `"${item.half_day_type || ''}"`,
         `"${item.permission_time || ''}"`,
         `"${item.permission_reason || ''}"`,
+        item.is_holiday ? 'Yes' : 'No',
         `"${item.notes || ''}"`
       ].join(','))
     ].join('\n');
@@ -1326,33 +1464,30 @@ export default function AdminManualAttendance() {
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = users.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(users.length / itemsPerPage);
-useEffect(() => {
-  // Force horizontal scroll to work
-  const fixTableScroll = () => {
-    const tableContainers = document.querySelectorAll('.table-container');
-    tableContainers.forEach(container => {
-      // Remove any inline styles that might be blocking scroll
-      container.style.overflowX = 'auto';
-      container.style.overflowY = 'visible';
-      container.style.maxWidth = 'none';
-      
-      // Force table width
-      const table = container.querySelector('table');
-      if (table) {
-        table.style.minWidth = '1200px';
-        table.style.width = '100%';
-      }
-    });
-  };
 
-  // Run on mount and after data loads
-  fixTableScroll();
-  
-  // Also run on resize
-  window.addEventListener('resize', fixTableScroll);
-  
-  return () => window.removeEventListener('resize', fixTableScroll);
-}, [users, selectedDate, viewMode, filters]);
+  useEffect(() => {
+    // Force horizontal scroll to work
+    const fixTableScroll = () => {
+      const tableContainers = document.querySelectorAll('.table-container');
+      tableContainers.forEach(container => {
+        container.style.overflowX = 'auto';
+        container.style.overflowY = 'visible';
+        container.style.maxWidth = 'none';
+        
+        const table = container.querySelector('table');
+        if (table) {
+          table.style.minWidth = '1200px';
+          table.style.width = '100%';
+        }
+      });
+    };
+
+    fixTableScroll();
+    window.addEventListener('resize', fixTableScroll);
+    
+    return () => window.removeEventListener('resize', fixTableScroll);
+  }, [users, selectedDate, viewMode, filters]);
+
   // Initialize on component mount
   useEffect(() => {
     fetchUsers();
@@ -1397,7 +1532,7 @@ useEffect(() => {
         <div className="header-left">
           <button
             className="btn-back"
-            onClick={() => navigate(-1)} // Go back to previous page
+            onClick={() => navigate(-1)}
           >
             <ChevronLeft size={24} />
             <span>Back</span>
@@ -1408,13 +1543,19 @@ useEffect(() => {
           </div>
         </div>
         <div className="header-right">
+          <button 
+            className="btn-holiday" 
+            onClick={() => setShowHolidayModal(true)}
+            title="Mark a date as holiday"
+          >
+            <Sun size={20} />
+            <span>Mark Holiday</span>
+          </button>
           <button className="btn-stats" onClick={() => setShowStatsModal(true)}>
             <BarChart2 size={20} />
             <span>Statistics</span>
           </button>
         </div>
-    
-       
       </header>
 
       {/* Main Content */}
@@ -1428,13 +1569,13 @@ useEffect(() => {
             <Calendar size={20} />
             <span>Mark Attendance</span>
           </button>
-          {/* <button
+          <button
             className={`toggle-btn ${viewMode === 'viewer' ? 'active' : ''}`}
             onClick={() => setViewMode('viewer')}
           >
             <Eye size={20} />
             <span>View Records</span>
-          </button> */}
+          </button>
         </div>
 
         {/* Statistics Cards */}
@@ -1464,6 +1605,24 @@ useEffect(() => {
             <div className="stat-content">
               <h3>{stats.halfDay}</h3>
               <p>Half Day</p>
+            </div>
+          </div>
+          <div className="stat-card stat-permission">
+            <div className="stat-icon">
+              <Calendar size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>{stats.permission}</h3>
+              <p>Permission</p>
+            </div>
+          </div>
+          <div className="stat-card stat-holiday">
+            <div className="stat-icon">
+              <Sun size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>{stats.holiday}</h3>
+              <p>Holiday</p>
             </div>
           </div>
           <div className="stat-card stat-pending">
@@ -1545,6 +1704,13 @@ useEffect(() => {
                         <Calendar size={16} />
                         <span>Permission</span>
                       </button>
+                      <button
+                        className={`action-btn ${bulkAction === 'holiday' ? 'active' : ''}`}
+                        onClick={() => setBulkAction('holiday')}
+                      >
+                        <Sun size={16} />
+                        <span>Holiday</span>
+                      </button>
                     </div>
                   </div>
 
@@ -1613,6 +1779,21 @@ useEffect(() => {
                     </div>
                   )}
 
+                  {bulkAction === 'holiday' && (
+                    <div className="form-group">
+                      <label>Holiday Reason (Optional)</label>
+                      <input
+                        type="text"
+                        value={holidayReason}
+                        onChange={(e) => setHolidayReason(e.target.value)}
+                        className="form-input"
+                        placeholder="e.g., Public Holiday, Company Holiday"
+                      />
+                      <small className="info-hint">
+                        Note: Marking as holiday will override any existing attendance for the selected date.
+                      </small>
+                    </div>
+                  )}
 
                   <div className="bulk-controls">
                     <button className="btn-select-all" onClick={selectAllUsers}>
@@ -1649,419 +1830,433 @@ useEffect(() => {
             </div>
 
             {/* Attendance Table */}
-<div className="attendance-table-card">
-  <div className="card-header">
-    <h3>Attendance for {selectedDate}</h3>
-    <div className="header-actions">
-      <button
-        className={`btn-filter ${showFilters ? 'active' : ''}`}
-        onClick={() => setShowFilters(!showFilters)}
-      >
-        <Filter size={16} />
-        <span>Filters</span>
-      </button>
-      <button
-        className="btn-submit-all"
-        onClick={submitAllAttendance}
-        disabled={loading}
-      >
-        <Save size={16} />
-        <span>{loading ? 'Submitting...' : 'Submit All'}</span>
-      </button>
-    </div>
-  </div>
+            <div className="attendance-table-card">
+              <div className="card-header">
+                <h3>Attendance for {selectedDate}</h3>
+                <div className="header-actions">
+                  <button
+                    className={`btn-filter ${showFilters ? 'active' : ''}`}
+                    onClick={() => setShowFilters(!showFilters)}
+                  >
+                    <Filter size={16} />
+                    <span>Filters</span>
+                  </button>
+                  <button
+                    className="btn-submit-all"
+                    onClick={submitAllAttendance}
+                    disabled={loading}
+                  >
+                    <Save size={16} />
+                    <span>{loading ? 'Submitting...' : 'Submit All'}</span>
+                  </button>
+                </div>
+              </div>
 
-  {showFilters && (
-    <div className="filter-section">
-      <div className="filter-group">
-        <label>
-          <Search size={16} />
-          <span>Search</span>
-        </label>
-        <input
-          type="text"
-          placeholder="Search by name..."
-          className="filter-input"
-        />
-      </div>
-    </div>
-  )}
+              {showFilters && (
+                <div className="filter-section">
+                  <div className="filter-group">
+                    <label>
+                      <Search size={16} />
+                      <span>Search</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Search by name..."
+                      className="filter-input"
+                    />
+                  </div>
+                </div>
+              )}
 
-  {usersLoading ? (
-    <div className="loading-state">
-      <div className="spinner"></div>
-      <p>Loading users...</p>
-    </div>
-  ) : users.length === 0 ? (
-    <div className="empty-state">
-      <Users size={48} />
-      <h3>No Users Found</h3>
-      <p>Add users to start managing attendance</p>
-    </div>
-  ) : (
-    <>
-      <div className="table-container-wrapper">
-        <div className="table-container" style={{
-  width: '100%',
-  overflowX: 'auto',
-  overflowY: 'visible',
-  WebkitOverflowScrolling: 'touch',
-  position: 'relative',
-  margin: '0',
-  padding: '0',
-  maxWidth: 'none'
-}}>
-  <table className="attendance-table" style={{
-    minWidth: '1200px',
-    width: '100%',
-    tableLayout: 'fixed'
-  }}>
-            <thead>
-              <tr>
-                <th style={{ width: '60px' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedUsers.length === users.length}
-                    onChange={selectAllUsers}
-                  />
-                </th>
-                <th>Employee</th>
-                <th>Designation</th>
-                <th>Department</th>
-                <th>Status</th>
-                <th>Time</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentItems.map(user => {
-                const record = attendanceRecords[user.id] || {
-                  status: 'pending',
-                  checkIn: '09:30',
-                  checkOut: '19:00',
-                  absenceReason: '',
-                  alreadyMarked: false
-                };
-                const existing = existingAttendance[user.id];
-                const isAlreadyMarked = existing || record.alreadyMarked;
-                const isExpanded = expandedUsers[user.id];
-
-                return (
-                  <React.Fragment key={user.id}>
-                    <tr className={`user-row ${isAlreadyMarked ? 'marked' : ''} ${record.status}`}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={selectedUsers.includes(user.id)}
-                          onChange={() => toggleUserSelection(user.id)}
-                        />
-                      </td>
-                      <td>
-                        <div className="user-cell">
-                          <div className="user-avatar">
-                            {user.profile_url ? (
-                              <img src={user.profile_url} alt={user.name} />
-                            ) : (
-                              <User size={20} />
-                            )}
-                          </div>
-                          <div className="user-info">
-                            <strong>{user.name}</strong>
-                            <small>{user.employee_id || 'N/A'}</small>
-                          </div>
-                          <button
-                            className="expand-btn"
-                            onClick={() => toggleUserExpansion(user.id)}
-                          >
-                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                          </button>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="designation-cell">
-                          <Briefcase size={14} />
-                          <span>{user.designation || 'N/A'}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="department-cell">
-                          <Building size={14} />
-                          <span>{user.mobile || 'N/A'}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <select
-                          value={record.status}
-                          onChange={(e) => {
-                            const updated = { ...attendanceRecords };
-                            updated[user.id] = {
-                              ...updated[user.id],
-                              status: e.target.value,
+              {usersLoading ? (
+                <div className="loading-state">
+                  <div className="spinner"></div>
+                  <p>Loading users...</p>
+                </div>
+              ) : users.length === 0 ? (
+                <div className="empty-state">
+                  <Users size={48} />
+                  <h3>No Users Found</h3>
+                  <p>Add users to start managing attendance</p>
+                </div>
+              ) : (
+                <>
+                  <div className="table-container-wrapper">
+                    <div className="table-container" style={{
+                      width: '100%',
+                      overflowX: 'auto',
+                      overflowY: 'visible',
+                      WebkitOverflowScrolling: 'touch',
+                      position: 'relative',
+                      margin: '0',
+                      padding: '0',
+                      maxWidth: 'none'
+                    }}>
+                      <table className="attendance-table" style={{
+                        minWidth: '1400px',
+                        width: '100%',
+                        tableLayout: 'fixed'
+                      }}>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '50px' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedUsers.length === users.length}
+                                onChange={selectAllUsers}
+                              />
+                            </th>
+                            <th style={{ width: '200px' }}>Employee</th>
+                            <th style={{ width: '120px' }}>Designation</th>
+                            <th style={{ width: '120px' }}>Department</th>
+                            <th style={{ width: '130px' }}>Status</th>
+                            <th style={{ width: '250px' }}>Time / Details</th>
+                            <th style={{ width: '100px' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {currentItems.map(user => {
+                            const record = attendanceRecords[user.id] || {
+                              status: 'pending',
+                              checkIn: '09:30',
+                              checkOut: '19:00',
+                              absenceReason: '',
                               alreadyMarked: false
                             };
-                            setAttendanceRecords(updated);
-                          }}
-                          className="status-select"
-                          disabled={isAlreadyMarked}
-                        >
-                          <option value="pending">-- Select --</option>
-                          <option value="present">Present</option>
-                          <option value="absent">Absent</option>
-                          <option value="half-day-morning">Half Day (AM)</option>
-                          <option value="half-day-afternoon">Half Day (PM)</option>
-                          <option value="permission">Permission</option>
-                        </select>
-                      </td>
-                      <td>
-                        <div className="time-controls">
-                          {['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status) ? (
-                            <>
-                              <input
-                                type="time"
-                                value={record.checkIn || ''}
-                                onChange={(e) => {
-                                  const updated = { ...attendanceRecords };
-                                  updated[user.id] = {
-                                    ...updated[user.id],
-                                    checkIn: e.target.value,
-                                    alreadyMarked: false
-                                  };
-                                  setAttendanceRecords(updated);
-                                }}
-                                className="time-input"
-                                disabled={isAlreadyMarked}
-                              />
-                              <span className="time-separator">-</span>
-                              <input
-                                type="time"
-                                value={record.checkOut || ''}
-                                onChange={(e) => {
-                                  const updated = { ...attendanceRecords };
-                                  updated[user.id] = {
-                                    ...updated[user.id],
-                                    checkOut: e.target.value,
-                                    alreadyMarked: false
-                                  };
-                                  setAttendanceRecords(updated);
-                                }}
-                                className="time-input"
-                                disabled={isAlreadyMarked}
-                              />
-                            </>
-                          ) : record.status === 'absent' ? (
-                            <input
-                              type="text"
-                              value={record.absenceReason || ''}
-                              onChange={(e) => {
-                                const updated = { ...attendanceRecords };
-                                updated[user.id] = {
-                                  ...updated[user.id],
-                                  absenceReason: e.target.value,
-                                  alreadyMarked: false
-                                };
-                                setAttendanceRecords(updated);
-                              }}
-                              className="reason-input"
-                              placeholder="Absence reason"
-                              disabled={isAlreadyMarked}
-                            />
-                          ) : record.status === 'permission' ? (
-                            <div className="permission-inputs">
-                              <input
-                                type="time"
-                                value={permissionFrom}
-                                onChange={(e) => setPermissionFrom(e.target.value)}
-                                className="time-input"
-                                placeholder="From"
-                                disabled={isAlreadyMarked}
-                              />
-                              <span className="time-separator">to</span>
-                              <input
-                                type="time"
-                                value={permissionTo}
-                                onChange={(e) => setPermissionTo(e.target.value)}
-                                className="time-input"
-                                placeholder="To"
-                                disabled={isAlreadyScrollable}
-                              />
-                              <input
-                                type="text"
-                                value={permissionReason}
-                                onChange={(e) => setPermissionReason(e.target.value)}
-                                className="reason-input"
-                                placeholder="Permission reason"
-                                disabled={isAlreadyMarked}
-                              />
-                            </div>
-                          ) : (
-                            <span className="no-time">--:--</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="action-buttons">
-                          <button
-                            className="btn-submit"
-                            onClick={() => submitIndividualAttendance(user.id)}
-                            disabled={isAlreadyMarked || record.status === 'pending'}
-                            title={isAlreadyMarked ? "Already marked" : "Submit attendance"}
-                          >
-                            <Save size={14} />
-                          </button>
-                          <button
-                            className="btn-edit"
-                            onClick={() => handleEditAttendance(user)}
-                            title="Edit attendance"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr className="details-row">
-                        <td colSpan="7">
-                          <div className="user-details">
-                            <div className="detail-section">
-                              <h4>Attendance Details</h4>
-                              <div className="detail-grid">
-                                <div className="detail-item">
-                                  <span className="detail-label">Status:</span>
-                                  <span className={`detail-value status-${record.status}`}>
-                                    {record.status.replace('-', ' ').toUpperCase()}
-                                  </span>
-                                </div>
-                                {record.status === 'absent' && (
-                                  <div className="detail-item">
-                                    <span className="detail-label">Reason:</span>
+                            const existing = existingAttendance[user.id];
+                            const isAlreadyMarked = existing || record.alreadyMarked;
+                            const isExpanded = expandedUsers[user.id];
+
+                            return (
+                              <React.Fragment key={user.id}>
+                                <tr className={`user-row ${isAlreadyMarked ? 'marked' : ''} ${record.status}`}>
+                                  <td>
                                     <input
-                                      type="text"
-                                      value={record.absenceReason || ''}
+                                      type="checkbox"
+                                      checked={selectedUsers.includes(user.id)}
+                                      onChange={() => toggleUserSelection(user.id)}
+                                    />
+                                  </td>
+                                  <td>
+                                    <div className="user-cell">
+                                      <div className="user-avatar">
+                                        {user.profile_url ? (
+                                          <img src={user.profile_url} alt={user.name} />
+                                        ) : (
+                                          <User size={20} />
+                                        )}
+                                      </div>
+                                      <div className="user-info">
+                                        <strong>{user.name}</strong>
+                                        <small>{user.employee_id || 'N/A'}</small>
+                                      </div>
+                                      <button
+                                        className="expand-btn"
+                                        onClick={() => toggleUserExpansion(user.id)}
+                                      >
+                                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="designation-cell">
+                                      <Briefcase size={14} />
+                                      <span>{user.designation || 'N/A'}</span>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="department-cell">
+                                      <Building size={14} />
+                                      <span>{user.department || 'N/A'}</span>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <select
+                                      value={record.status}
                                       onChange={(e) => {
                                         const updated = { ...attendanceRecords };
                                         updated[user.id] = {
                                           ...updated[user.id],
-                                          absenceReason: e.target.value,
+                                          status: e.target.value,
                                           alreadyMarked: false
                                         };
                                         setAttendanceRecords(updated);
                                       }}
-                                      className="detail-input"
-                                      placeholder="Absence reason"
-                                    />
-                                  </div>
-                                )}
-                                {record.status === 'permission' && (
-                                  <div className="detail-item">
-                                    <span className="detail-label">Permission:</span>
-                                    <div className="permission-details">
-                                      <input
-                                        type="time"
-                                        value={permissionFrom}
-                                        onChange={(e) => setPermissionFrom(e.target.value)}
-                                        className="detail-input"
-                                        placeholder="HH:mm"
-                                      />
-                                      <span className="time-separator">to</span>
-                                      <input
-                                        type="time"
-                                        value={permissionTo}
-                                        onChange={(e) => setPermissionTo(e.target.value)}
-                                        className="detail-input"
-                                        placeholder="HH:mm"
-                                      />
-                                      <input
-                                        type="text"
-                                        value={permissionReason}
-                                        onChange={(e) => setPermissionReason(e.target.value)}
-                                        className="detail-input"
-                                        placeholder="Reason"
-                                      />
+                                      className="status-select"
+                                      disabled={isAlreadyMarked}
+                                    >
+                                      <option value="pending">-- Select --</option>
+                                      <option value="present">Present</option>
+                                      <option value="absent">Absent</option>
+                                      <option value="half-day-morning">Half Day (AM)</option>
+                                      <option value="half-day-afternoon">Half Day (PM)</option>
+                                      <option value="permission">Permission</option>
+                                      <option value="holiday">Holiday</option>
+                                    </select>
+                                  </td>
+                                  <td>
+                                    <div className="time-controls">
+                                      {['present', 'half-day-morning', 'half-day-afternoon'].includes(record.status) ? (
+                                        <>
+                                          <input
+                                            type="time"
+                                            value={record.checkIn || ''}
+                                            onChange={(e) => {
+                                              const updated = { ...attendanceRecords };
+                                              updated[user.id] = {
+                                                ...updated[user.id],
+                                                checkIn: e.target.value,
+                                                alreadyMarked: false
+                                              };
+                                              setAttendanceRecords(updated);
+                                            }}
+                                            className="time-input"
+                                            disabled={isAlreadyMarked}
+                                          />
+                                          <span className="time-separator">-</span>
+                                          <input
+                                            type="time"
+                                            value={record.checkOut || ''}
+                                            onChange={(e) => {
+                                              const updated = { ...attendanceRecords };
+                                              updated[user.id] = {
+                                                ...updated[user.id],
+                                                checkOut: e.target.value,
+                                                alreadyMarked: false
+                                              };
+                                              setAttendanceRecords(updated);
+                                            }}
+                                            className="time-input"
+                                            disabled={isAlreadyMarked}
+                                          />
+                                        </>
+                                      ) : record.status === 'absent' ? (
+                                        <input
+                                          type="text"
+                                          value={record.absenceReason || ''}
+                                          onChange={(e) => {
+                                            const updated = { ...attendanceRecords };
+                                            updated[user.id] = {
+                                              ...updated[user.id],
+                                              absenceReason: e.target.value,
+                                              alreadyMarked: false
+                                            };
+                                            setAttendanceRecords(updated);
+                                          }}
+                                          className="reason-input"
+                                          placeholder="Absence reason"
+                                          disabled={isAlreadyMarked}
+                                        />
+                                      ) : record.status === 'permission' ? (
+                                        <div className="permission-inputs">
+                                          <input
+                                            type="time"
+                                            value={permissionFrom}
+                                            onChange={(e) => setPermissionFrom(e.target.value)}
+                                            className="time-input"
+                                            placeholder="From"
+                                            disabled={isAlreadyMarked}
+                                          />
+                                          <span className="time-separator">to</span>
+                                          <input
+                                            type="time"
+                                            value={permissionTo}
+                                            onChange={(e) => setPermissionTo(e.target.value)}
+                                            className="time-input"
+                                            placeholder="To"
+                                            disabled={isAlreadyMarked}
+                                          />
+                                          <input
+                                            type="text"
+                                            value={permissionReason}
+                                            onChange={(e) => setPermissionReason(e.target.value)}
+                                            className="reason-input"
+                                            placeholder="Reason"
+                                            disabled={isAlreadyMarked}
+                                          />
+                                        </div>
+                                      ) : record.status === 'holiday' ? (
+                                        <div className="holiday-badge">
+                                          <Sun size={16} />
+                                          <span>Holiday</span>
+                                        </div>
+                                      ) : (
+                                        <span className="no-time">--:--</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="action-buttons">
                                       <button
-                                        className="btn-save-permission"
-                                        onClick={() => {
-                                          // Update the record with permission data
-                                          const updated = { ...attendanceRecords };
-                                          updated[user.id] = {
-                                            ...updated[user.id],
-                                            permissionTime: `${permissionFrom}-${permissionTo}`,
-                                            permissionReason: permissionReason,
-                                            alreadyMarked: false
-                                          };
-                                          setAttendanceRecords(updated);
-                                          handlePermissionSubmit(user.id);
-                                        }}
-                                        disabled={!permissionFrom || !permissionTo || !permissionReason.trim()}
+                                        className="btn-submit"
+                                        onClick={() => submitIndividualAttendance(user.id)}
+                                        disabled={isAlreadyMarked || record.status === 'pending'}
+                                        title={isAlreadyMarked ? "Already marked" : "Submit attendance"}
                                       >
-                                        Save
+                                        <Save size={14} />
+                                      </button>
+                                      <button
+                                        className="btn-edit"
+                                        onClick={() => handleEditAttendance(user)}
+                                        title="Edit attendance"
+                                      >
+                                        <Edit2 size={14} />
                                       </button>
                                     </div>
-                                  </div>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr className="details-row">
+                                    <td colSpan="7">
+                                      <div className="user-details">
+                                        <div className="detail-section">
+                                          <h4>Attendance Details</h4>
+                                          <div className="detail-grid">
+                                            <div className="detail-item">
+                                              <span className="detail-label">Status:</span>
+                                              <span className={`detail-value status-${record.status}`}>
+                                                {record.status.replace('-', ' ').toUpperCase()}
+                                              </span>
+                                            </div>
+                                            {record.status === 'absent' && (
+                                              <div className="detail-item">
+                                                <span className="detail-label">Reason:</span>
+                                                <input
+                                                  type="text"
+                                                  value={record.absenceReason || ''}
+                                                  onChange={(e) => {
+                                                    const updated = { ...attendanceRecords };
+                                                    updated[user.id] = {
+                                                      ...updated[user.id],
+                                                      absenceReason: e.target.value,
+                                                      alreadyMarked: false
+                                                    };
+                                                    setAttendanceRecords(updated);
+                                                  }}
+                                                  className="detail-input"
+                                                  placeholder="Absence reason"
+                                                />
+                                              </div>
+                                            )}
+                                            {record.status === 'permission' && (
+                                              <div className="detail-item">
+                                                <span className="detail-label">Permission:</span>
+                                                <div className="permission-details">
+                                                  <input
+                                                    type="time"
+                                                    value={permissionFrom}
+                                                    onChange={(e) => setPermissionFrom(e.target.value)}
+                                                    className="detail-input"
+                                                    placeholder="HH:mm"
+                                                  />
+                                                  <span className="time-separator">to</span>
+                                                  <input
+                                                    type="time"
+                                                    value={permissionTo}
+                                                    onChange={(e) => setPermissionTo(e.target.value)}
+                                                    className="detail-input"
+                                                    placeholder="HH:mm"
+                                                  />
+                                                  <input
+                                                    type="text"
+                                                    value={permissionReason}
+                                                    onChange={(e) => setPermissionReason(e.target.value)}
+                                                    className="detail-input"
+                                                    placeholder="Reason"
+                                                  />
+                                                  <button
+                                                    className="btn-save-permission"
+                                                    onClick={() => {
+                                                      const updated = { ...attendanceRecords };
+                                                      updated[user.id] = {
+                                                        ...updated[user.id],
+                                                        permissionTime: `${permissionFrom}-${permissionTo}`,
+                                                        permissionReason: permissionReason,
+                                                        alreadyMarked: false
+                                                      };
+                                                      setAttendanceRecords(updated);
+                                                      handlePermissionSubmit(user.id);
+                                                    }}
+                                                    disabled={!permissionFrom || !permissionTo || !permissionReason.trim()}
+                                                  >
+                                                    Save
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                            {record.status === 'holiday' && (
+                                              <div className="detail-item">
+                                                <span className="detail-label">Holiday:</span>
+                                                <span className="holiday-info">
+                                                  <Sun size={16} />
+                                                  Marked as Holiday
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
                                 )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        
-        {/* Scroll hint */}
-        <div className="scroll-hint">
-          <ChevronLeft size={16} />
-          <span>Scroll horizontally to see all columns</span>
-          <ChevronRight size={16} />
-        </div>
-      </div>
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    {/* Scroll hint */}
+                    <div className="scroll-hint">
+                      <ChevronLeft size={16} />
+                      <span>Scroll horizontally to see all columns</span>
+                      <ChevronRight size={16} />
+                    </div>
+                  </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button
-            className="pagination-btn"
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-          >
-            <ChevronLeft size={16} />
-          </button>
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNumber;
-            if (totalPages <= 5) {
-              pageNumber = i + 1;
-            } else if (currentPage <= 3) {
-              pageNumber = i + 1;
-            } else if (currentPage >= totalPages - 2) {
-              pageNumber = totalPages - 4 + i;
-            } else {
-              pageNumber = currentPage - 2 + i;
-            }
-            return (
-              <button
-                key={pageNumber}
-                className={`pagination-btn ${currentPage === pageNumber ? 'active' : ''}`}
-                onClick={() => setCurrentPage(pageNumber)}
-              >
-                {pageNumber}
-              </button>
-            );
-          })}
-          <button
-            className="pagination-btn"
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      )}
-    </>
-  )}
-</div>
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="pagination">
+                      <button
+                        className="pagination-btn"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNumber;
+                        if (totalPages <= 5) {
+                          pageNumber = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNumber = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNumber = totalPages - 4 + i;
+                        } else {
+                          pageNumber = currentPage - 2 + i;
+                        }
+                        return (
+                          <button
+                            key={pageNumber}
+                            className={`pagination-btn ${currentPage === pageNumber ? 'active' : ''}`}
+                            onClick={() => setCurrentPage(pageNumber)}
+                          >
+                            {pageNumber}
+                          </button>
+                        );
+                      })}
+                      <button
+                        className="pagination-btn"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </>
         ) : (
           <>
@@ -2122,6 +2317,7 @@ useEffect(() => {
                       <option value="absent">Absent</option>
                       <option value="half-day">Half Day</option>
                       <option value="permission">Permission</option>
+                      <option value="holiday">Holiday</option>
                     </select>
                   </div>
                   <div className="form-group">
@@ -2220,6 +2416,106 @@ useEffect(() => {
         )}
       </main>
 
+      {/* Holiday Modal */}
+      {showHolidayModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h2>Mark Holiday</h2>
+              <button className="modal-close" onClick={() => setShowHolidayModal(false)}>
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Holiday Type</label>
+                <div className="holiday-type-selector">
+                  <button
+                    className={`holiday-type-option ${holidayAction === 'today' ? 'active' : ''}`}
+                    onClick={() => {
+                      setHolidayAction('today');
+                      setHolidayDate(new Date().toISOString().split('T')[0]);
+                    }}
+                  >
+                    <Sun size={20} />
+                    <span>Today</span>
+                    <small>{new Date().toISOString().split('T')[0]}</small>
+                  </button>
+                  <button
+                    className={`holiday-type-option ${holidayAction === 'specific' ? 'active' : ''}`}
+                    onClick={() => setHolidayAction('specific')}
+                  >
+                    <Calendar size={20} />
+                    <span>Specific Date</span>
+                  </button>
+                </div>
+              </div>
+
+              {holidayAction === 'specific' && (
+                <div className="form-group">
+                  <label>Select Date</label>
+                  <input
+                    type="date"
+                    value={holidayDate}
+                    onChange={(e) => setHolidayDate(e.target.value)}
+                    className="form-input"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>Holiday Reason</label>
+                <input
+                  type="text"
+                  value={holidayReason}
+                  onChange={(e) => setHolidayReason(e.target.value)}
+                  className="form-input"
+                  placeholder="e.g., Public Holiday, Company Holiday"
+                />
+              </div>
+
+              {selectedUsers.length > 0 && (
+                <div className="holiday-user-info">
+                  <Users size={16} />
+                  <span>
+                    Apply to {selectedUsers.length} selected user(s)
+                    {selectedUsers.length === users.length ? ' (All users)' : ''}
+                  </span>
+                  <button
+                    className="clear-selection"
+                    onClick={() => setSelectedUsers([])}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+
+              <div className="holiday-info">
+                <AlertCircle size={16} />
+                <small>
+                  This will mark {holidayAction === 'today' ? 'today' : holidayDate} as a holiday
+                  {selectedUsers.length > 0 ? ` for ${selectedUsers.length} selected user(s)` : ' for all employees'}.
+                  Any existing attendance for that date will be overridden.
+                </small>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowHolidayModal(false)}>
+                Cancel
+              </button>
+              <button 
+                className="btn-primary btn-holiday" 
+                onClick={handleMarkAsHoliday}
+                disabled={loading}
+              >
+                {loading ? 'Processing...' : `Mark as Holiday`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Attendance Modal */}
       {showEditModal && (
         <div className="modal-overlay">
@@ -2257,23 +2553,24 @@ useEffect(() => {
               <div className="form-group">
                 <label>Attendance Type</label>
                 <div className="type-selector">
-                  {['present', 'absent', 'half-day', 'permission'].map(type => (
+                  {['present', 'absent', 'half-day', 'permission', 'holiday'].map(type => (
                     <button
                       key={type}
                       className={`type-option ${editAttendanceData.attendanceType === type ? 'active' : ''}`}
                       onClick={() => setEditAttendanceData(prev => ({
                         ...prev,
                         attendanceType: type,
-                        // Set default times when selecting half-day
                         ...(type === 'half-day' ? {
                           halfDayType: 'morning',
                           halfDayCheckIn: '09:30',
                           halfDayCheckOut: '13:00'
                         } : {}),
-                        // Set default times for present
                         ...(type === 'present' ? {
                           checkIn: '09:30',
                           checkOut: '19:00'
+                        } : {}),
+                        ...(type === 'holiday' ? {
+                          isHoliday: true
                         } : {})
                       }))}
                     >
@@ -2281,6 +2578,7 @@ useEffect(() => {
                       {type === 'absent' && <XCircle size={18} />}
                       {type === 'half-day' && <Clock size={18} />}
                       {type === 'permission' && <Calendar size={18} />}
+                      {type === 'holiday' && <Sun size={18} />}
                       <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
                     </button>
                   ))}
@@ -2438,6 +2736,16 @@ useEffect(() => {
                 </div>
               )}
 
+              {editAttendanceData.attendanceType === 'holiday' && (
+                <div className="holiday-info-box">
+                  <Sun size={24} />
+                  <div>
+                    <h4>Mark as Holiday</h4>
+                    <p>This will mark the selected date as a holiday. No check-in/out times are required.</p>
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>Notes</label>
                 <textarea
@@ -2459,6 +2767,7 @@ useEffect(() => {
           </div>
         </div>
       )}
+
       {/* Bulk Edit Modal */}
       {showBulkEditModal && (
         <div className="modal-overlay">
@@ -2488,7 +2797,7 @@ useEffect(() => {
               <div className="form-group">
                 <label>Attendance Type</label>
                 <div className="type-selector">
-                  {['present', 'absent', 'half-day', 'permission'].map(type => (
+                  {['present', 'absent', 'half-day', 'permission', 'holiday'].map(type => (
                     <button
                       key={type}
                       className={`type-option ${bulkEditData.attendanceType === type ? 'active' : ''}`}
@@ -2498,6 +2807,7 @@ useEffect(() => {
                       {type === 'absent' && <XCircle size={18} />}
                       {type === 'half-day' && <Clock size={18} />}
                       {type === 'permission' && <Calendar size={18} />}
+                      {type === 'holiday' && <Sun size={18} />}
                       <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
                     </button>
                   ))}
@@ -2548,6 +2858,16 @@ useEffect(() => {
                       rows="2"
                       required
                     />
+                  </div>
+                </div>
+              )}
+
+              {bulkEditData.attendanceType === 'holiday' && (
+                <div className="holiday-info-box">
+                  <Sun size={24} />
+                  <div>
+                    <h4>Mark as Holiday</h4>
+                    <p>This will mark the selected date as a holiday for all selected users.</p>
                   </div>
                 </div>
               )}
