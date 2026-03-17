@@ -5,6 +5,7 @@ import "jspdf-autotable";
 import * as XLSX from 'xlsx';
 
 export default function AdminAllAttendance() {
+  
   const [attendance, setAttendance] = useState([]);
   const [filteredAttendance, setFilteredAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,11 +25,84 @@ export default function AdminAllAttendance() {
   const [showDateRange, setShowDateRange] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
 
-  const getToken = () => {
-    const authData = JSON.parse(localStorage.getItem("auth"));
-    return authData?.session?.access_token || authData?.access_token || authData?.token || null;
-  };
+  // API Base URL - change this based on environment
+  const API_BASE_URL = process.env.NODE_ENV === 'development' 
+    ? 'https://attendance-backend-d4vi.onrender.com' 
+    : 'https://attendance-backend-d4vi.onrender.com';
 
+  // Add this helper function at the top of your component, after the useState declarations
+  const isHolidayRecord = (record) => {
+    return record.holiday === true || 
+           record.is_holiday === true || 
+           record.status === 'Holiday' || 
+           record.status_code === 'holiday' ||
+           (record.check_in === null && record.check_out === null && !record.is_absent && !record.half_day_type && !record.permission_time);
+  };
+const isAuthenticated = () => {
+  const token = getToken();
+  return !!token;
+};
+ const getToken = () => {
+  try {
+    const authData = JSON.parse(localStorage.getItem("auth"));
+    console.log('Auth data structure:', authData); // Debug log
+    
+    // Try different possible token locations
+    const token = authData?.session?.access_token || 
+                  authData?.access_token || 
+                  authData?.token || 
+                  authData?.user?.access_token ||
+                  null;
+    
+    console.log('Extracted token:', token ? 'Token found' : 'No token found');
+    return token;
+  } catch (error) {
+    console.error('Error parsing auth data:', error);
+    return null;
+  }
+};
+useEffect(() => {
+  // Debug localStorage
+  const authData = localStorage.getItem("auth");
+  console.log('Raw auth data:', authData);
+  
+  if (authData) {
+    try {
+      const parsed = JSON.parse(authData);
+      console.log('Parsed auth data:', parsed);
+      console.log('Available keys:', Object.keys(parsed));
+      
+      // Check for token in various locations
+      console.log('session?.access_token:', parsed?.session?.access_token);
+      console.log('access_token:', parsed?.access_token);
+      console.log('token:', parsed?.token);
+      console.log('user?.access_token:', parsed?.user?.access_token);
+      
+    } catch (e) {
+      console.error('Failed to parse auth data:', e);
+    }
+  }
+}, []);
+  // Add this useEffect to debug the data structure
+  useEffect(() => {
+    if (filteredAttendance.length > 0) {
+      console.log('Sample record:', filteredAttendance[0]);
+      console.log('All status codes:', [...new Set(filteredAttendance.map(r => r.status_code))]);
+      console.log('All statuses:', [...new Set(filteredAttendance.map(r => r.status))]);
+      
+      // Check for holiday records
+      const holidayRecords = filteredAttendance.filter(r => 
+        r.status === 'Holiday' || 
+        r.status_code === 'holiday' || 
+        r.holiday === true ||
+        r.is_holiday === true
+      );
+      console.log('Holiday records found:', holidayRecords.length);
+      if (holidayRecords.length > 0) {
+        console.log('Sample holiday record:', holidayRecords[0]);
+      }
+    }
+  }, [filteredAttendance]);
 
   useEffect(() => {
     fetchAttendance();
@@ -65,404 +139,108 @@ export default function AdminAllAttendance() {
     }
     return dates;
   };
-  // Add these helper functions before the return statement:
 
+  // UPDATED: Calculate per-user statistics with HOLIDAY support
+  const calculatePerUserSummary = () => {
+    const userMap = {};
 
-const handleExportUserSummaryPDF = () => {
-  try {
-    if (filteredAttendance.length === 0) {
-      alert('No data to export!');
-      return;
-    }
+    // Group data by user
+    filteredAttendance.forEach(record => {
+      const userId = record.user_id;
+      const userName = record.user_info?.name || 'Unknown';
+      const employeeId = record.user_info?.employee_id || 'N/A';
 
-    const perUserSummary = calculatePerUserSummary();
-    const overallStats = calculateOverallStats();
+      if (!userMap[userId]) {
+        userMap[userId] = {
+          name: userName,
+          employeeId: employeeId,
+          department: record.user_info?.designation || 'N/A',
+          present: 0,
+          absent: 0,
+          holiday: 0,
+          halfDays: 0,
+          halfDayFN: 0,
+          halfDayAN: 0,
+          permission: 0,
+          totalDaysWithRecords: 0,
+          totalWorkMinutes: 0,
+          uniqueDates: new Set()
+        };
+      }
 
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4'
+      const user = userMap[userId];
+
+      // Add date to unique dates set
+      if (record.date) {
+        user.uniqueDates.add(record.date);
+      }
+
+      user.totalDaysWithRecords++;
+
+      // Check status with HOLIDAY support
+      const isHoliday = isHolidayRecord(record);
+
+      if (isHoliday) {
+        user.holiday++;
+      } else if (record.is_absent) {
+        user.absent++;
+      } else if (record.half_day_type) {
+        user.halfDays++;
+        if (record.half_day_type.includes('morning') || record.half_day_type.includes('FN') ||
+          record.half_day_type.includes('forenoon')) {
+          user.halfDayFN++;
+        } else if (record.half_day_type.includes('afternoon') || record.half_day_type.includes('AN')) {
+          user.halfDayAN++;
+        }
+      } else if (record.permission_time) {
+        user.permission++;
+      } else if (record.check_in && record.check_out) {
+        user.present++;
+        if (record.total_time_minutes) {
+          user.totalWorkMinutes += record.total_time_minutes;
+        }
+      }
     });
 
-    // Title
-    doc.setFontSize(18);
-    doc.setTextColor(40, 40, 40);
-    doc.text('ATTENDANCE DETAILED REPORT', 145, 20, null, null, 'center');
+    // Convert to array and calculate statistics
+    return Object.values(userMap).map(user => {
+      // Include holiday in total working days calculation
+      const totalWorkingDays = user.present + user.absent + user.halfDays + user.permission + user.holiday;
 
-    // Subtitle
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 145, 28, null, null, 'center');
-
-    // Filter info
-    let dateRange = '';
-    if (filters.date) {
-      dateRange = `Date: ${filters.date}`;
-    } else if (filters.startDate && filters.endDate) {
-      dateRange = `Date Range: ${filters.startDate} to ${filters.endDate}`;
-    } else {
-      dateRange = 'All Dates';
-    }
-    doc.text(dateRange, 145, 35, null, null, 'center');
-
-    // ==================== ATTENDANCE DETAILED TABLE ====================
-    doc.setFontSize(14);
-    doc.setTextColor(0, 0, 0);
-    doc.text('ATTENDANCE RECORDS', 20, 50);
-
-    // Table headers for detailed records
-    const headers = [
-      'Date', 'Emp ID', 'Name', 'Designation', 
-      'Check In', 'Check Out', 'Total Time', 'Status', 'Absence Reason', 'Type'
-    ];
-    
-    const colWidths = [18, 25, 35, 30, 20, 20, 20, 20, 35, 15];
-
-    let y = 60;
-
-    // Draw header
-    doc.setFillColor(52, 152, 219);
-    doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
-
-    let xPos = 20;
-    headers.forEach((header, i) => {
-      doc.text(header, xPos + 2, y + 5);
-      xPos += colWidths[i];
-    });
-
-    y += 10;
-
-    // Draw attendance data
-    doc.setTextColor(40, 40, 40);
-    doc.setFontSize(7);
-
-    filteredAttendance.forEach((record, index) => {
-      // Check for page break
-      if (y > doc.internal.pageSize.height - 20) {
-        doc.addPage();
-        y = 20;
-
-        // Redraw header on new page
-        doc.setFillColor(52, 152, 219);
-        doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
-        doc.setTextColor(255, 255, 255);
-
-        xPos = 20;
-        headers.forEach((header, i) => {
-          doc.text(header, xPos + 2, y + 5);
-          xPos += colWidths[i];
-        });
-
-        y += 10;
-        doc.setTextColor(40, 40, 40);
+      // If no working days at all, show N/A
+      if (totalWorkingDays === 0) {
+        return {
+          ...user,
+          attendanceRate: 'N/A',
+          totalWorkingDays: 0,
+          uniqueDateCount: user.uniqueDates.size
+        };
       }
 
-      // Alternate row colors
-      if (index % 2 === 0) {
-        doc.setFillColor(245, 245, 245);
-        doc.rect(20, y, colWidths.reduce((a, b) => a + b), 7, 'F');
-      }
+      // Calculate percentage based on actual working days (including holiday as 100% attendance)
+      const attendanceRate = ((user.present + user.holiday + (user.halfDays * 0.5) + (user.permission * 0.75)) / totalWorkingDays * 100).toFixed(1);
 
-      // Get status
-      const getStatus = (record) => {
-        if (record.is_absent) return 'Absent';
-        if (record.check_in && !record.check_out) return 'Checked In';
-        if (record.check_in && record.check_out) return 'Checked Out';
-        return 'Not Checked In';
-      };
-
-      const formatTime = (datetime) => {
-        if (!datetime) return "-";
-        try {
-          const dateObj = new Date(datetime);
-          return dateObj.toLocaleTimeString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            hour12: true,
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-        } catch {
-          return "-";
-        }
-      };
-
-      const recordData = [
-        record.date || '-',
-        record.user_info?.employee_id || '-',
-        record.user_info?.name?.substring(0, 15) || '-',
-        record.user_info?.designation?.substring(0, 12) || '-',
-        formatTime(record.check_in),
-        formatTime(record.check_out),
-        record.total_time_formatted?.substring(0, 8) || '-',
-        getStatus(record),
-        record.absence_reason?.substring(0, 20) || '-',
-        record.manual_entry ? 'Manual' : 'Auto'
-      ];
-
-      xPos = 20;
-      recordData.forEach((cell, i) => {
-        // Color code status
-        if (i === 7) {
-          const status = cell.toLowerCase();
-          if (status.includes('absent')) {
-            doc.setTextColor(211, 47, 47); // Red
-          } else if (status.includes('present') || status.includes('checked out')) {
-            doc.setTextColor(46, 125, 50); // Green
-          } else if (status.includes('checked in')) {
-            doc.setTextColor(245, 124, 0); // Orange
-          } else {
-            doc.setTextColor(100, 100, 100); // Gray
-          }
-        } else {
-          doc.setTextColor(40, 40, 40);
-        }
-
-        doc.text(cell.toString(), xPos + 2, y + 5);
-        xPos += colWidths[i];
-      });
-
-      y += 7;
-    });
-
-    // ==================== EMPLOYEE SUMMARY (Optional - Add as separate page) ====================
-    if (perUserSummary.length > 0) {
-      doc.addPage();
-      
-      // Employee Summary Title
-      doc.setFontSize(16);
-      doc.setTextColor(40, 40, 40);
-      doc.text('EMPLOYEE SUMMARY STATISTICS', 105, 20, null, null, 'center');
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Total Employees: ${perUserSummary.length}`, 105, 28, null, null, 'center');
-      
-      // Summary Table
-      const summaryHeaders = ['Employee Name', 'Emp ID', 'Present', 'Absent', 'Half Days', 'Permission', 'Attendance %'];
-      const summaryColWidths = [45, 25, 15, 15, 25, 20, 25];
-      
-      let summaryY = 40;
-      
-      // Draw summary header
-      doc.setFillColor(41, 128, 185);
-      doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 8, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(8);
-      
-      xPos = 20;
-      summaryHeaders.forEach((header, i) => {
-        doc.text(header, xPos + 2, summaryY + 5);
-        xPos += summaryColWidths[i];
-      });
-      
-      summaryY += 10;
-      doc.setTextColor(40, 40, 40);
-      doc.setFontSize(7);
-      
-      perUserSummary.forEach((user, index) => {
-        if (summaryY > doc.internal.pageSize.height - 20) {
-          doc.addPage();
-          summaryY = 20;
-          
-          // Redraw header
-          doc.setFillColor(41, 128, 185);
-          doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 8, 'F');
-          doc.setTextColor(255, 255, 255);
-          
-          xPos = 20;
-          summaryHeaders.forEach((header, i) => {
-            doc.text(header, xPos + 2, summaryY + 5);
-            xPos += summaryColWidths[i];
-          });
-          
-          summaryY += 10;
-          doc.setTextColor(40, 40, 40);
-        }
-        
-        // Alternate row colors
-        if (index % 2 === 0) {
-          doc.setFillColor(245, 245, 245);
-          doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 7, 'F');
-        }
-        
-        // Format half days
-        const halfDaysText = user.halfDays > 0 ?
-          `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` :
-          '0';
-        
-        const userData = [
-          user.name.length > 15 ? user.name.substring(0, 14) + '...' : user.name,
-          user.employeeId,
-          user.present.toString(),
-          user.absent.toString(),
-          halfDaysText,
-          user.permission.toString(),
-          user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`
-        ];
-        
-        xPos = 20;
-        userData.forEach((cell, i) => {
-          // Color code attendance percentage
-          if (i === 6 && user.attendanceRate !== 'N/A') {
-            const rate = parseFloat(user.attendanceRate);
-            if (rate >= 90) {
-              doc.setTextColor(46, 125, 50);
-            } else if (rate >= 70) {
-              doc.setTextColor(245, 124, 0);
-            } else {
-              doc.setTextColor(211, 47, 47);
-            }
-          } else if (i === 6 && user.attendanceRate === 'N/A') {
-            doc.setTextColor(100, 100, 100);
-          } else {
-            doc.setTextColor(40, 40, 40);
-          }
-          
-          doc.text(cell.toString(), xPos + 2, summaryY + 5);
-          xPos += summaryColWidths[i];
-        });
-        
-        summaryY += 7;
-      });
-      
-      // Overall Statistics
-      summaryY += 10;
-      doc.setFontSize(10);
-      doc.setTextColor(0, 0, 0);
-      doc.text('Overall Statistics:', 20, summaryY);
-      
-      summaryY += 7;
-      doc.setFontSize(8);
-      
-      const statsLines = [
-        `• Total Employees: ${perUserSummary.length}`,
-        `• Total Present Days: ${overallStats.totalPresent}`,
-        `• Total Absent Days: ${overallStats.totalAbsent}`,
-        `• Total Half Days: ${overallStats.totalHalfDays} (FN: ${overallStats.halfDayFN}, AN: ${overallStats.halfDayAN})`,
-        `• Total Permission Days: ${overallStats.totalPermission}`,
-        `• Average Attendance Rate: ${overallStats.averageAttendanceRate}`,
-        `• Date Range: ${filters.startDate && filters.endDate ? 
-          `${filters.startDate} to ${filters.endDate}` : filters.date || 'All dates'}`
-      ];
-      
-      statsLines.forEach((line, idx) => {
-        doc.text(line, 25, summaryY + (idx * 4));
-      });
-    }
-
-    // Footer
-    const totalY = doc.internal.pageSize.height - 10;
-    doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Page ${doc.internal.getNumberOfPages()} | Generated on: ${new Date().toLocaleDateString()}`, 145, totalY, null, null, 'center');
-
-    // Save PDF
-    const filename = `attendance-detailed-report-${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(filename);
-
-  } catch (err) {
-    console.error('Detailed PDF error:', err);
-    alert('Error generating detailed PDF: ' + err.message);
-  }
-};
-  // Calculate per-user statistics
-// Calculate per-user statistics - FIXED VERSION
-const calculatePerUserSummary = () => {
-  const userMap = {};
-
-  // Group data by user
-  filteredAttendance.forEach(record => {
-    const userId = record.user_id;
-    const userName = record.user_info?.name || 'Unknown';
-    const employeeId = record.user_info?.employee_id || 'N/A';
-
-    if (!userMap[userId]) {
-      userMap[userId] = {
-        name: userName,
-        employeeId: employeeId,
-        department: record.user_info?.designation || 'N/A',
-        present: 0,
-        absent: 0,
-        halfDays: 0,
-        halfDayFN: 0,
-        halfDayAN: 0,
-        permission: 0,
-        totalDaysWithRecords: 0,
-        totalWorkMinutes: 0,
-        uniqueDates: new Set()
-      };
-    }
-
-    const user = userMap[userId];
-
-    // Add date to unique dates set
-    if (record.date) {
-      user.uniqueDates.add(record.date);
-    }
-
-    user.totalDaysWithRecords++;
-
-    // Check status
-    if (record.is_absent) {
-      user.absent++;
-    } else if (record.half_day_type) {
-      user.halfDays++;
-      if (record.half_day_type.includes('morning') || record.half_day_type.includes('FN') ||
-        record.half_day_type.includes('forenoon')) {
-        user.halfDayFN++;
-      } else if (record.half_day_type.includes('afternoon') || record.half_day_type.includes('AN')) {
-        user.halfDayAN++;
-      }
-    } else if (record.permission_time) {
-      user.permission++;
-    } else if (record.check_in && record.check_out) {
-      user.present++;
-      if (record.total_time_minutes) {
-        user.totalWorkMinutes += record.total_time_minutes;
-      }
-    }
-  });
-
-  // Convert to array and calculate statistics
-  return Object.values(userMap).map(user => {
-    // FIX 1: Correct attendance percentage calculation
-    // Only count present, absent, half-days, and permission as working days
-    const totalWorkingDays = user.present + user.absent + user.halfDays + user.permission;
-    
-    // If no working days at all, show N/A
-    if (totalWorkingDays === 0) {
       return {
         ...user,
-        attendanceRate: 'N/A',
-        totalWorkingDays: 0,
+        attendanceRate,
+        totalWorkingDays,
         uniqueDateCount: user.uniqueDates.size
       };
-    }
+    }).sort((a, b) => {
+      // Sort with N/A at the bottom
+      if (a.attendanceRate === 'N/A') return 1;
+      if (b.attendanceRate === 'N/A') return -1;
+      return parseFloat(b.attendanceRate) - parseFloat(a.attendanceRate);
+    });
+  };
 
-    // Calculate percentage based on actual working days
-    const attendanceRate = ((user.present + (user.halfDays * 0.5) + (user.permission * 0.75)) / totalWorkingDays * 100).toFixed(1);
-    
-    return {
-      ...user,
-      attendanceRate,
-      totalWorkingDays,
-      uniqueDateCount: user.uniqueDates.size
-    };
-  }).sort((a, b) => {
-    // Sort with N/A at the bottom
-    if (a.attendanceRate === 'N/A') return 1;
-    if (b.attendanceRate === 'N/A') return -1;
-    return parseFloat(b.attendanceRate) - parseFloat(a.attendanceRate);
-  });
-};
-  // Calculate overall statistics
+  // UPDATED: Calculate overall statistics with HOLIDAY support
   const calculateOverallStats = () => {
     const perUserSummary = calculatePerUserSummary();
 
     const totalPresent = perUserSummary.reduce((sum, user) => sum + user.present, 0);
     const totalAbsent = perUserSummary.reduce((sum, user) => sum + user.absent, 0);
+    const totalHoliday = perUserSummary.reduce((sum, user) => sum + (user.holiday || 0), 0);
     const totalHalfDays = perUserSummary.reduce((sum, user) => sum + user.halfDays, 0);
     const halfDayFN = perUserSummary.reduce((sum, user) => sum + user.halfDayFN, 0);
     const halfDayAN = perUserSummary.reduce((sum, user) => sum + user.halfDayAN, 0);
@@ -475,6 +253,7 @@ const calculatePerUserSummary = () => {
     return {
       totalPresent,
       totalAbsent,
+      totalHoliday,
       totalHalfDays,
       halfDayFN,
       halfDayAN,
@@ -486,12 +265,13 @@ const calculatePerUserSummary = () => {
         : '0%'
     };
   };
+
   const fetchAttendance = async () => {
     try {
       setLoading(true);
       const token = getToken();
 
-      const res = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/all', {
+      const res = await fetch(`${API_BASE_URL}/attendance/all`, {
         headers: token ? {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -520,7 +300,7 @@ const calculatePerUserSummary = () => {
       setLoading(true);
       const token = getToken();
 
-      const url = `https://attendance-backend-d4vi.onrender.com/attendance/filter?startDate=${startDate}&endDate=${endDate}`;
+      const url = `${API_BASE_URL}/attendance/filter?startDate=${startDate}&endDate=${endDate}`;
       const res = await fetch(url, {
         headers: token ? {
           Authorization: `Bearer ${token}`,
@@ -543,9 +323,7 @@ const calculatePerUserSummary = () => {
     }
   };
 
-  // New function to generate PDF via backend
-  // ✅ Backend PDF generator (UPDATED)
-  // Backend PDF generator (IMPROVED)
+  // UPDATED: Backend PDF generator with HOLIDAY support
   const generateBackendPDF = async () => {
     try {
       setGeneratingPDF(true);
@@ -557,56 +335,35 @@ const calculatePerUserSummary = () => {
         return;
       }
 
-      // ✅ Update the payload in generateBackendPDF function
       const payload = {
         reportType: 'detailed',
         startDate: filters.startDate || '',
         endDate: filters.endDate || '',
-        // Add these for proper date range filtering
         ...(filters.date && { day: filters.date }),
         ...(filters.employeeId?.trim() && { employeeId: filters.employeeId }),
         ...(filters.designation?.trim() && { designation: filters.designation }),
         ...(filters.name?.trim() && { name: filters.name }),
         ...(filters.status?.trim() && { status: filters.status }),
-        // Ensure we get user statistics
         includeSummary: true,
         groupByDepartment: false,
         includeCharts: false
       };
 
-      // Remove the default date if specific filters are set
       if (filters.date) {
         delete payload.startDate;
         delete payload.endDate;
       }
 
       if (!payload.startDate && !payload.endDate && !payload.day) {
-        // Default to last 30 days if no date specified
         const endDate = new Date();
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 30);
-
         payload.startDate = startDate.toISOString().split('T')[0];
         payload.endDate = endDate.toISOString().split('T')[0];
       }
 
       console.log('📄 Backend PDF Payload:', payload);
-      // Test the endpoint first with a simple GET request
-      try {
-        const testResponse = await fetch('https://attendance-backend-d4vi.onrender.com/attendance/test', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
 
-        if (!testResponse.ok) {
-          console.warn('Test endpoint failed, but continuing...');
-        }
-      } catch (testErr) {
-        console.warn('Test request failed:', testErr);
-      }
-
-      // Show user we're starting
       const userConfirmed = window.confirm(
         'Generate detailed PDF report via backend? This may take a few moments.'
       );
@@ -617,7 +374,7 @@ const calculatePerUserSummary = () => {
       }
 
       const response = await fetch(
-        'https://attendance-backend-d4vi.onrender.com/attendance/generate-pdf',
+        `${API_BASE_URL}/attendance/generate-pdf`,
         {
           method: 'POST',
           headers: {
@@ -638,14 +395,12 @@ const calculatePerUserSummary = () => {
           console.error('Error details:', errorData);
           errorMessage = errorData.message || errorMessage;
 
-          // Check for specific backend errors
           if (errorData.message?.includes('No attendance data found')) {
             alert('No data found for the selected filters. Try different dates or filters.');
             setGeneratingPDF(false);
             return;
           }
         } catch (parseError) {
-          // If not JSON, try text
           try {
             const errorText = await response.text();
             console.error('Error text:', errorText);
@@ -658,21 +413,16 @@ const calculatePerUserSummary = () => {
         throw new Error(errorMessage);
       }
 
-      // Check content type
       const contentType = response.headers.get('content-type');
       console.log('Content-Type:', contentType);
 
       if (!contentType || !contentType.includes('application/pdf')) {
         console.warn('Response is not PDF. Headers:', Object.fromEntries(response.headers.entries()));
-
-        // Try to read as text to see what we got
         const responseText = await response.text();
         console.log('Response text (first 500 chars):', responseText.substring(0, 500));
-
         throw new Error('Server did not return a PDF file');
       }
 
-      // Get the blob
       const blob = await response.blob();
       console.log('Blob size:', blob.size, 'type:', blob.type);
 
@@ -680,19 +430,16 @@ const calculatePerUserSummary = () => {
         throw new Error('Received empty PDF file');
       }
 
-      // Create filename
       const contentDisposition = response.headers.get('content-disposition');
       let filename = `attendance-report-${payload.startDate || payload.day || 'all'}-to-${payload.endDate || payload.day || 'all'}.pdf`;
 
       if (contentDisposition) {
-        // Try to extract filename
         const matches = contentDisposition.match(/filename="?([^"]+)"?/i);
         if (matches && matches[1]) {
           filename = matches[1];
         }
       }
 
-      // Download
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -700,7 +447,6 @@ const calculatePerUserSummary = () => {
       document.body.appendChild(a);
       a.click();
 
-      // Cleanup
       setTimeout(() => {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
@@ -716,7 +462,6 @@ const calculatePerUserSummary = () => {
         name: error.name
       });
 
-      // Offer fallback options
       const fallbackChoice = confirm(
         `Backend PDF failed: ${error.message}\n\n` +
         'Choose an alternative:\n' +
@@ -725,22 +470,85 @@ const calculatePerUserSummary = () => {
       );
 
       if (fallbackChoice) {
-        // Try client-side PDF
         const clientSuccess = handleClientSidePDF();
         if (!clientSuccess) {
-          // If client PDF also fails, offer CSV
           if (confirm('Browser PDF also failed. Export as CSV instead?')) {
             handleExportCSV();
           }
         }
       } else {
-        // Export CSV
         handleExportCSV();
       }
     } finally {
       setGeneratingPDF(false);
     }
   };
+
+  // UPDATED: Mark today as holiday with correct API URL
+  const handleMarkTodayAsHoliday = async () => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Check authentication first
+    const token = getToken();
+    if (!token) {
+      alert('You are not authenticated. Please login again.');
+      // Redirect to login page or show login modal
+      window.location.href = '/login';
+      return;
+    }
+    
+    const confirm = window.confirm(
+      `Are you sure you want to mark ${today} as a holiday for ALL employees?`
+    );
+    
+    if (!confirm) return;
+    
+    setGeneratingPDF(true);
+    
+    console.log('Sending request with token:', token.substring(0, 20) + '...'); // Debug log
+    
+    const response = await fetch(
+      `${API_BASE_URL}/attendance/mark-today-holiday`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    console.log('Response status:', response.status);
+    
+    if (response.status === 401) {
+      // Token expired or invalid
+      localStorage.removeItem('auth'); // Clear invalid token
+      alert('Your session has expired. Please login again.');
+      window.location.href = '/login';
+      return;
+    }
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new Error(errorData.message || `Failed with status ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    alert(`✅ Successfully marked ${today} as holiday for ${result.affected_users} employees`);
+    
+    // Refresh the attendance data
+    await fetchAttendance();
+    
+  } catch (err) {
+    console.error('Error marking holiday:', err);
+    alert('Error marking holiday: ' + err.message);
+  } finally {
+    setGeneratingPDF(false);
+  }
+};
+
   // Enhanced PDF export with both options
   const handleExportPDF = async (useBackend = false) => {
     if (filteredAttendance.length === 0) {
@@ -753,11 +561,10 @@ const calculatePerUserSummary = () => {
       return;
     }
 
-    // Client-side PDF fallback
     handleClientSidePDF();
   };
 
-  // Simplified PDF with per-user summary
+  // UPDATED: Simplified PDF with per-user summary and HOLIDAY support
   const handleClientSidePDF = () => {
     try {
       if (filteredAttendance.length === 0) {
@@ -771,17 +578,14 @@ const calculatePerUserSummary = () => {
         format: 'a4'
       });
 
-      // Title
       doc.setFontSize(18);
       doc.setTextColor(40, 40, 40);
       doc.text('EMPLOYEE ATTENDANCE SUMMARY REPORT', 105, 20, null, null, 'center');
 
-      // Date info
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.text(`Generated: ${new Date().toLocaleString()}`, 105, 28, null, null, 'center');
 
-      // Filter info
       let filterInfo = '';
       if (filters.date) filterInfo += `Date: ${filters.date} | `;
       if (filters.startDate && filters.endDate) {
@@ -794,7 +598,6 @@ const calculatePerUserSummary = () => {
         doc.text(filterInfo, 105, 35, null, null, 'center');
       }
 
-      // ==================== PER-USER SUMMARY TABLE ====================
       const perUserSummary = calculatePerUserSummary();
       const overallStats = calculateOverallStats();
 
@@ -803,17 +606,15 @@ const calculatePerUserSummary = () => {
       doc.setFont(undefined, 'bold');
       doc.text('EMPLOYEE-WISE ATTENDANCE SUMMARY', 20, 50);
 
-      // Table headers
-      const headers = ['Employee Name', 'Emp ID', 'Present', 'Absent', 'Half Days', 'Permission', 'Attendance %'];
-      const colWidths = [50, 25, 15, 15, 25, 20, 25];
+      const headers = ['Employee Name', 'Emp ID', 'Present', 'Absent', 'Holiday', 'Half Days', 'Permission', 'Attendance %'];
+      const colWidths = [45, 20, 12, 12, 12, 20, 15, 20];
 
       let y = 60;
 
-      // Draw header
       doc.setFillColor(52, 152, 219);
       doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(9);
+      doc.setFontSize(8);
 
       let xPos = 20;
       headers.forEach((header, i) => {
@@ -822,18 +623,14 @@ const calculatePerUserSummary = () => {
       });
 
       y += 10;
-
-      // Draw user data
       doc.setTextColor(40, 40, 40);
-      doc.setFontSize(8);
+      doc.setFontSize(7);
 
       perUserSummary.forEach((user, index) => {
-        // Check for page break
         if (y > doc.internal.pageSize.height - 20) {
           doc.addPage();
           y = 20;
 
-          // Redraw header on new page
           doc.setFillColor(52, 152, 219);
           doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
           doc.setTextColor(255, 255, 255);
@@ -848,39 +645,39 @@ const calculatePerUserSummary = () => {
           doc.setTextColor(40, 40, 40);
         }
 
-        // Alternate row colors
         if (index % 2 === 0) {
           doc.setFillColor(245, 245, 245);
           doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
         }
 
-        // Format half days as "FN/AN"
         const halfDaysText = user.halfDays > 0 ?
           `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` :
           user.halfDays.toString();
 
         const userData = [
-          user.name.length > 15 ? user.name.substring(0, 14) + '...' : user.name,
+          user.name.length > 12 ? user.name.substring(0, 11) + '...' : user.name,
           user.employeeId,
           user.present.toString(),
           user.absent.toString(),
+          (user.holiday || 0).toString(),
           halfDaysText,
           user.permission.toString(),
-          `${user.attendanceRate}%`
+          user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`
         ];
 
         xPos = 20;
         userData.forEach((cell, i) => {
-          // Color code attendance percentage
-          if (i === 6) {
+          if (i === 7 && user.attendanceRate !== 'N/A') {
             const rate = parseFloat(user.attendanceRate);
             if (rate >= 90) {
-              doc.setTextColor(46, 125, 50); // Green
+              doc.setTextColor(46, 125, 50);
             } else if (rate >= 70) {
-              doc.setTextColor(245, 124, 0); // Orange
+              doc.setTextColor(245, 124, 0);
             } else {
-              doc.setTextColor(211, 47, 47); // Red
+              doc.setTextColor(211, 47, 47);
             }
+          } else if (i === 4) {
+            doc.setTextColor(156, 39, 176);
           } else {
             doc.setTextColor(40, 40, 40);
           }
@@ -892,7 +689,6 @@ const calculatePerUserSummary = () => {
         y += 8;
       });
 
-      // ==================== OVERALL SUMMARY ====================
       y += 10;
       doc.setFontSize(12);
       doc.setTextColor(0, 0, 0);
@@ -908,16 +704,17 @@ const calculatePerUserSummary = () => {
         `• Date Range: ${filters.startDate && filters.endDate ? `${filters.startDate} to ${filters.endDate}` : filters.date || 'All dates'}`,
         `• Total Present Days: ${overallStats.totalPresent}`,
         `• Total Absent Days: ${overallStats.totalAbsent}`,
+        `• Total Holiday Days: ${overallStats.totalHoliday || 0}`,
         `• Total Half Days: ${overallStats.totalHalfDays} (FN: ${overallStats.halfDayFN}, AN: ${overallStats.halfDayAN})`,
         `• Total Permission Days: ${overallStats.totalPermission}`,
-        `• Total Records Analyzed: ${filteredAttendance.length}`
+        `• Total Records Analyzed: ${filteredAttendance.length}`,
+        `• Average Attendance Rate: ${overallStats.averageAttendanceRate}`
       ];
 
       summaryLines.forEach((line, index) => {
         doc.text(line, 25, y + (index * 6));
       });
 
-      // Save the PDF
       const filename = `employee-attendance-summary-${filters.date || 'all'}-${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(filename);
 
@@ -927,6 +724,288 @@ const calculatePerUserSummary = () => {
       console.error('PDF generation error:', err);
       alert('Error generating PDF: ' + err.message);
       return false;
+    }
+  };
+
+  // UPDATED: Detailed PDF export with HOLIDAY support
+  const handleExportUserSummaryPDF = () => {
+    try {
+      if (filteredAttendance.length === 0) {
+        alert('No data to export!');
+        return;
+      }
+
+      const perUserSummary = calculatePerUserSummary();
+      const overallStats = calculateOverallStats();
+
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      doc.setFontSize(18);
+      doc.setTextColor(40, 40, 40);
+      doc.text('ATTENDANCE DETAILED REPORT', 145, 20, null, null, 'center');
+
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 145, 28, null, null, 'center');
+
+      let dateRange = '';
+      if (filters.date) {
+        dateRange = `Date: ${filters.date}`;
+      } else if (filters.startDate && filters.endDate) {
+        dateRange = `Date Range: ${filters.startDate} to ${filters.endDate}`;
+      } else {
+        dateRange = 'All Dates';
+      }
+      doc.text(dateRange, 145, 35, null, null, 'center');
+
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text('ATTENDANCE RECORDS', 20, 50);
+
+      const headers = [
+        'Date', 'Emp ID', 'Name', 'Designation',
+        'Check In', 'Check Out', 'Total Time', 'Status', 'Absence Reason', 'Type'
+      ];
+
+      const colWidths = [18, 25, 35, 30, 20, 20, 20, 20, 35, 15];
+
+      let y = 60;
+
+      doc.setFillColor(52, 152, 219);
+      doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+
+      let xPos = 20;
+      headers.forEach((header, i) => {
+        doc.text(header, xPos + 2, y + 5);
+        xPos += colWidths[i];
+      });
+
+      y += 10;
+      doc.setTextColor(40, 40, 40);
+      doc.setFontSize(7);
+
+      filteredAttendance.forEach((record, index) => {
+        if (y > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          y = 20;
+
+          doc.setFillColor(52, 152, 219);
+          doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
+          doc.setTextColor(255, 255, 255);
+
+          xPos = 20;
+          headers.forEach((header, i) => {
+            doc.text(header, xPos + 2, y + 5);
+            xPos += colWidths[i];
+          });
+
+          y += 10;
+          doc.setTextColor(40, 40, 40);
+        }
+
+        if (index % 2 === 0) {
+          doc.setFillColor(245, 245, 245);
+          doc.rect(20, y, colWidths.reduce((a, b) => a + b), 7, 'F');
+        }
+
+        const getStatus = (record) => {
+          if (isHolidayRecord(record)) return 'Holiday';
+          if (record.is_absent) return 'Absent';
+          if (record.check_in && !record.check_out) return 'Checked In';
+          if (record.check_in && record.check_out) return 'Checked Out';
+          return 'Not Checked In';
+        };
+
+        const formatTime = (datetime) => {
+          if (!datetime) return "-";
+          try {
+            const dateObj = new Date(datetime);
+            return dateObj.toLocaleTimeString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              hour12: true,
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+          } catch {
+            return "-";
+          }
+        };
+
+        const recordData = [
+          record.date || '-',
+          record.user_info?.employee_id || '-',
+          record.user_info?.name?.substring(0, 15) || '-',
+          record.user_info?.designation?.substring(0, 12) || '-',
+          formatTime(record.check_in),
+          formatTime(record.check_out),
+          record.total_time_formatted?.substring(0, 8) || '-',
+          getStatus(record),
+          record.absence_reason?.substring(0, 20) || '-',
+          record.manual_entry ? 'Manual' : 'Auto'
+        ];
+
+        xPos = 20;
+        recordData.forEach((cell, i) => {
+          if (i === 7) {
+            const status = cell.toLowerCase();
+            if (status.includes('holiday')) {
+              doc.setTextColor(156, 39, 176);
+            } else if (status.includes('absent')) {
+              doc.setTextColor(211, 47, 47);
+            } else if (status.includes('present') || status.includes('checked out')) {
+              doc.setTextColor(46, 125, 50);
+            } else if (status.includes('checked in')) {
+              doc.setTextColor(245, 124, 0);
+            } else {
+              doc.setTextColor(100, 100, 100);
+            }
+          } else {
+            doc.setTextColor(40, 40, 40);
+          }
+
+          doc.text(cell.toString(), xPos + 2, y + 5);
+          xPos += colWidths[i];
+        });
+
+        y += 7;
+      });
+
+      if (perUserSummary.length > 0) {
+        doc.addPage();
+
+        doc.setFontSize(16);
+        doc.setTextColor(40, 40, 40);
+        doc.text('EMPLOYEE SUMMARY STATISTICS', 105, 20, null, null, 'center');
+
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Total Employees: ${perUserSummary.length}`, 105, 28, null, null, 'center');
+
+        const summaryHeaders = ['Employee Name', 'Emp ID', 'Present', 'Absent', 'Holiday', 'Half Days', 'Permission', 'Attendance %'];
+        const summaryColWidths = [40, 20, 12, 12, 12, 20, 15, 20];
+
+        let summaryY = 40;
+
+        doc.setFillColor(41, 128, 185);
+        doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(8);
+
+        xPos = 20;
+        summaryHeaders.forEach((header, i) => {
+          doc.text(header, xPos + 2, summaryY + 5);
+          xPos += summaryColWidths[i];
+        });
+
+        summaryY += 10;
+        doc.setTextColor(40, 40, 40);
+        doc.setFontSize(7);
+
+        perUserSummary.forEach((user, index) => {
+          if (summaryY > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            summaryY = 20;
+
+            doc.setFillColor(41, 128, 185);
+            doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 8, 'F');
+            doc.setTextColor(255, 255, 255);
+
+            xPos = 20;
+            summaryHeaders.forEach((header, i) => {
+              doc.text(header, xPos + 2, summaryY + 5);
+              xPos += summaryColWidths[i];
+            });
+
+            summaryY += 10;
+            doc.setTextColor(40, 40, 40);
+          }
+
+          if (index % 2 === 0) {
+            doc.setFillColor(245, 245, 245);
+            doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 7, 'F');
+          }
+
+          const halfDaysText = user.halfDays > 0 ?
+            `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` :
+            user.halfDays.toString();
+
+          const userData = [
+            user.name.length > 12 ? user.name.substring(0, 11) + '...' : user.name,
+            user.employeeId,
+            user.present.toString(),
+            user.absent.toString(),
+            (user.holiday || 0).toString(),
+            halfDaysText,
+            user.permission.toString(),
+            user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`
+          ];
+
+          xPos = 20;
+          userData.forEach((cell, i) => {
+            if (i === 7 && user.attendanceRate !== 'N/A') {
+              const rate = parseFloat(user.attendanceRate);
+              if (rate >= 90) {
+                doc.setTextColor(46, 125, 50);
+              } else if (rate >= 70) {
+                doc.setTextColor(245, 124, 0);
+              } else {
+                doc.setTextColor(211, 47, 47);
+              }
+            } else if (i === 4) {
+              doc.setTextColor(156, 39, 176);
+            } else {
+              doc.setTextColor(40, 40, 40);
+            }
+
+            doc.text(cell.toString(), xPos + 2, summaryY + 5);
+            xPos += summaryColWidths[i];
+          });
+
+          summaryY += 7;
+        });
+
+        summaryY += 10;
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.text('Overall Statistics:', 20, summaryY);
+
+        summaryY += 7;
+        doc.setFontSize(8);
+
+        const statsLines = [
+          `• Total Employees: ${perUserSummary.length}`,
+          `• Total Present Days: ${overallStats.totalPresent}`,
+          `• Total Absent Days: ${overallStats.totalAbsent}`,
+          `• Total Holiday Days: ${overallStats.totalHoliday || 0}`,
+          `• Total Half Days: ${overallStats.totalHalfDays} (FN: ${overallStats.halfDayFN}, AN: ${overallStats.halfDayAN})`,
+          `• Total Permission Days: ${overallStats.totalPermission}`,
+          `• Average Attendance Rate: ${overallStats.averageAttendanceRate}`,
+          `• Date Range: ${filters.startDate && filters.endDate ?
+            `${filters.startDate} to ${filters.endDate}` : filters.date || 'All dates'}`
+        ];
+
+        statsLines.forEach((line, idx) => {
+          doc.text(line, 25, summaryY + (idx * 4));
+        });
+      }
+
+      const totalY = doc.internal.pageSize.height - 10;
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Page ${doc.internal.getNumberOfPages()} | Generated on: ${new Date().toLocaleDateString()}`, 145, totalY, null, null, 'center');
+
+      const filename = `attendance-detailed-report-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(filename);
+
+    } catch (err) {
+      console.error('Detailed PDF error:', err);
+      alert('Error generating detailed PDF: ' + err.message);
     }
   };
 
@@ -983,6 +1062,7 @@ const calculatePerUserSummary = () => {
     }
   };
 
+  // UPDATED: Apply filters with HOLIDAY support
   const applyFilters = () => {
     let filtered = [...attendance];
 
@@ -1023,7 +1103,9 @@ const calculatePerUserSummary = () => {
     setCurrentPage(1);
   };
 
+  // UPDATED: Get status with HOLIDAY support
   const getStatus = (record) => {
+    if (isHolidayRecord(record)) return 'Holiday';
     if (record.is_absent) return 'Absent';
     if (record.check_in && !record.check_out) return 'Checked In';
     if (record.check_in && record.check_out) return 'Checked Out';
@@ -1068,6 +1150,7 @@ const calculatePerUserSummary = () => {
     setFilteredAttendance(attendance);
   };
 
+  // UPDATED: Export CSV with HOLIDAY support
   const handleExportCSV = () => {
     if (filteredAttendance.length === 0) {
       alert('No data to export!');
@@ -1076,15 +1159,14 @@ const calculatePerUserSummary = () => {
 
     try {
       const csvContent = [
-        ['Date', 'Employee ID', 'Name', 'Email', 'designation', 'Designation',
+        ['Date', 'Employee ID', 'Name', 'Email', 'Designation',
           'Check In (IST)', 'Check Out (IST)', 'Total Time', 'Status',
-          'Absence Reason', 'Manual Entry', 'Record Date'],
+          'Absence Reason', 'Manual Entry', 'Record Date', 'Is Holiday'],
         ...filteredAttendance.map(record => [
           record.date,
           `"${record.user_info?.employee_id || '-'}"`,
           `"${record.user_info?.name || '-'}"`,
           `"${record.user_info?.email || '-'}"`,
-          `"${record.user_info?.designation || '-'}"`,
           `"${record.user_info?.designation || '-'}"`,
           `"${formatTime(record.check_in)}"`,
           `"${formatTime(record.check_out)}"`,
@@ -1092,7 +1174,8 @@ const calculatePerUserSummary = () => {
           `"${getStatus(record)}"`,
           `"${record.absence_reason || '-'}"`,
           record.manual_entry ? 'Yes' : 'No',
-          `"${new Date().toLocaleDateString()}"`
+          `"${new Date().toLocaleDateString()}"`,
+          isHolidayRecord(record) ? 'Yes' : 'No'
         ])
       ].map(row => row.join(',')).join('\n');
 
@@ -1114,6 +1197,7 @@ const calculatePerUserSummary = () => {
     }
   };
 
+  // UPDATED: Export Excel with HOLIDAY support
   const handleExportExcel = () => {
     if (filteredAttendance.length === 0) {
       alert('No data to export!');
@@ -1126,7 +1210,6 @@ const calculatePerUserSummary = () => {
         'Employee ID': record.user_info?.employee_id || '-',
         'Name': record.user_info?.name || '-',
         'Email': record.user_info?.email || '-',
-        'designation': record.user_info?.designation || '-',
         'Designation': record.user_info?.designation || '-',
         'Check In (IST)': formatTime(record.check_in),
         'Check Out (IST)': formatTime(record.check_out),
@@ -1134,6 +1217,7 @@ const calculatePerUserSummary = () => {
         'Status': getStatus(record),
         'Absence Reason': record.absence_reason || '-',
         'Manual Entry': record.manual_entry ? 'Yes' : 'No',
+        'Is Holiday': isHolidayRecord(record) ? 'Yes' : 'No',
         'Record Date': new Date().toLocaleDateString()
       }));
 
@@ -1143,8 +1227,8 @@ const calculatePerUserSummary = () => {
 
       const wscols = [
         { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 25 },
-        { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
-        { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 10 }, { wch: 12 }
+        { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+        { wch: 12 }, { wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 12 }
       ];
       ws['!cols'] = wscols;
 
@@ -1187,8 +1271,9 @@ const calculatePerUserSummary = () => {
       });
 
       const filteredStats = {
-        present: filteredAttendance.filter(a => !a.is_absent && a.check_in).length,
+        present: filteredAttendance.filter(a => !a.is_absent && a.check_in && !isHolidayRecord(a)).length,
         absent: filteredAttendance.filter(a => a.is_absent).length,
+        holiday: filteredAttendance.filter(a => isHolidayRecord(a)).length,
         checkedIn: filteredAttendance.filter(a => a.check_in && !a.check_out).length,
         manual: filteredAttendance.filter(a => a.manual_entry).length,
         auto: filteredAttendance.filter(a => !a.manual_entry).length
@@ -1201,6 +1286,7 @@ const calculatePerUserSummary = () => {
       const filteredSummary = [
         `Present: ${filteredStats.present}`,
         `Absent: ${filteredStats.absent}`,
+        `Holiday: ${filteredStats.holiday}`,
         `Checked In (No Check-out): ${filteredStats.checkedIn}`,
         `Manual Entries: ${filteredStats.manual}`,
         `Auto Entries: ${filteredStats.auto}`
@@ -1220,7 +1306,7 @@ const calculatePerUserSummary = () => {
       if (filters.name) activeFilters.push(`Name: ${filters.name}`);
       if (filters.employeeId) activeFilters.push(`Employee ID: ${filters.employeeId}`);
       if (filters.status) activeFilters.push(`Status: ${filters.status}`);
-      if (filters.designation) activeFilters.push(`designation: ${filters.designation}`);
+      if (filters.designation) activeFilters.push(`Designation: ${filters.designation}`);
       if (activeFilters.length === 0) activeFilters.push('No filters applied');
 
       activeFilters.forEach((item, index) => {
@@ -1254,10 +1340,12 @@ const calculatePerUserSummary = () => {
       totalRecords: attendance.length,
       todayRecords: todayRecords.length,
       yesterdayRecords: yesterdayRecords.length,
-      presentToday: todayRecords.filter(a => !a.is_absent && a.check_in).length,
+      presentToday: todayRecords.filter(a => !a.is_absent && a.check_in && !isHolidayRecord(a)).length,
       absentToday: todayRecords.filter(a => a.is_absent).length,
-      presentYesterday: yesterdayRecords.filter(a => !a.is_absent && a.check_in).length,
+      holidayToday: todayRecords.filter(a => isHolidayRecord(a)).length,
+      presentYesterday: yesterdayRecords.filter(a => !a.is_absent && a.check_in && !isHolidayRecord(a)).length,
       absentYesterday: yesterdayRecords.filter(a => a.is_absent).length,
+      holidayYesterday: yesterdayRecords.filter(a => isHolidayRecord(a)).length,
       filteredRecords: filteredAttendance.length,
       dateRange: selectedDates.length > 0
         ? `${selectedDates.length} day(s): ${selectedDates[0]} ${selectedDates.length > 1 ? `to ${selectedDates[selectedDates.length - 1]}` : ''}`
@@ -1269,13 +1357,11 @@ const calculatePerUserSummary = () => {
 
   return (
     <div className="admin-all-attendance">
-
       <div className="header-main">
-        {/* Add Back Button Here */}
         <div className="header-left">
           <button
             className="btn-back"
-            onClick={() => window.history.back()} // Or navigate(-1) if using React Router
+            onClick={() => window.history.back()}
             title="Go back to previous page"
           >
             ← Back
@@ -1285,7 +1371,16 @@ const calculatePerUserSummary = () => {
             <p>View and manage all attendance records</p>
           </div>
         </div>
+
         <div className="header-actions">
+          <button 
+            onClick={handleMarkTodayAsHoliday} 
+            className="export-btn holiday-btn"
+            title="Mark today as Holiday"
+            disabled={generatingPDF}
+          >
+            🏖️ Mark Today as Holiday
+          </button>
           <button onClick={handleExportCSV} className="export-btn csv" title="Export as CSV">
             📄 Export CSV
           </button>
@@ -1308,8 +1403,6 @@ const calculatePerUserSummary = () => {
                 '📊 Export PDF (Backend)'
               )}
             </button>
-
-            {/* Add a client-side PDF button as backup */}
             <button
               onClick={() => handleClientSidePDF()}
               className="export-btn pdf-client"
@@ -1331,7 +1424,7 @@ const calculatePerUserSummary = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards with Holiday */}
       <div className="stats-cards">
         <div className="stat-card">
           <h3>Total Records</h3>
@@ -1340,12 +1433,12 @@ const calculatePerUserSummary = () => {
         <div className="stat-card">
           <h3>Today's Records</h3>
           <p className="stat-value today">{stats.todayRecords}</p>
-          <small>Present: {stats.presentToday} | Absent: {stats.absentToday}</small>
+          <small>Present: {stats.presentToday} | Absent: {stats.absentToday} | Holiday: {stats.holidayToday || 0}</small>
         </div>
         <div className="stat-card">
           <h3>Yesterday's Records</h3>
           <p className="stat-value yesterday">{stats.yesterdayRecords}</p>
-          <small>Present: {stats.presentYesterday} | Absent: {stats.absentYesterday}</small>
+          <small>Present: {stats.presentYesterday} | Absent: {stats.absentYesterday} | Holiday: {stats.holidayYesterday || 0}</small>
         </div>
         <div className="stat-card">
           <h3>Filtered Results</h3>
@@ -1464,6 +1557,7 @@ const calculatePerUserSummary = () => {
               <option value="">All Status</option>
               <option value="present">Present</option>
               <option value="absent">Absent</option>
+              <option value="holiday">Holiday</option>
               <option value="checked-in">Checked In</option>
               <option value="checked-out">Checked Out</option>
             </select>
@@ -1490,23 +1584,21 @@ const calculatePerUserSummary = () => {
       </div>
 
       {/* Date Range Display */}
-      {
-        selectedDates.length > 0 && (
-          <div className="date-range-display">
-            <h3>Selected Date{selectedDates.length > 1 ? 's' : ''}</h3>
-            <div className="date-chips">
-              {selectedDates.slice(0, 10).map(date => (
-                <span key={date} className="date-chip">
-                  {date}
-                </span>
-              ))}
-              {selectedDates.length > 10 && (
-                <span className="date-chip more">+{selectedDates.length - 10} more</span>
-              )}
-            </div>
+      {selectedDates.length > 0 && (
+        <div className="date-range-display">
+          <h3>Selected Date{selectedDates.length > 1 ? 's' : ''}</h3>
+          <div className="date-chips">
+            {selectedDates.slice(0, 10).map(date => (
+              <span key={date} className="date-chip">
+                {date}
+              </span>
+            ))}
+            {selectedDates.length > 10 && (
+              <span className="date-chip more">+{selectedDates.length - 10} more</span>
+            )}
           </div>
-        )
-      }
+        </div>
+      )}
 
       {/* Attendance Table */}
       <div className="table-container">
@@ -1520,7 +1612,7 @@ const calculatePerUserSummary = () => {
                   <th>Date</th>
                   <th>Employee ID</th>
                   <th>Name</th>
-                  <th>designation</th>
+                  <th>Designation</th>
                   <th>Check In</th>
                   <th>Check Out</th>
                   <th>Total Time</th>
@@ -1629,83 +1721,69 @@ const calculatePerUserSummary = () => {
         )}
       </div>
 
-     {/* Per-User Summary Section - Updated */}
-<div className="per-user-summary-section">
-  <h2>📊 Employee-wise Summary</h2>
-  <div className="per-user-summary-table">
-    <table className="summary-table">
-      <thead>
-        <tr>
-          <th>Employee Name</th>
-          <th>Emp ID</th>
-          <th>Present</th>
-          <th>Absent</th>
-          <th>Half Days</th>
-          <th>Permission</th>
-          <th>Attendance %</th>
-        </tr>
-      </thead>
-      <tbody>
-        {filteredAttendance.length > 0 ? (
-          calculatePerUserSummary().slice(0, 10).map((user, index) => (
-            <tr key={`${user.employeeId}-${index}`}>
-              <td>{user.name}</td>
-              <td>{user.employeeId}</td>
-              <td className={user.present > 0 ? 'present-cell' : ''}>{user.present}</td>
-              <td className={user.absent > 0 ? 'absent-cell' : ''}>{user.absent}</td>
-              <td className={user.halfDays > 0 ? 'halfday-cell' : ''}>
-                {/* FIX 2: Show simple "0" instead of "0 (0FN/0AN)" for no half days */}
-                {user.halfDays > 0 ? `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` : '0'}
-              </td>
-              <td className={user.permission > 0 ? 'permission-cell' : ''}>{user.permission}</td>
-              <td className={`attendance-cell ${user.attendanceRate === 'N/A' ? 'na' : user.attendanceRate >= 90 ? 'excellent' : user.attendanceRate >= 70 ? 'good' : 'poor'}`}>
-                {user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`}
-              </td>
-            </tr>
-          ))
-        ) : (
-          <tr>
-            <td colSpan="7" className="no-data">
-              No data available
-            </td>
-          </tr>
-        )}
-        {calculatePerUserSummary().length > 10 && (
-          <tr>
-            <td colSpan="7" className="more-users">
-              ... and {calculatePerUserSummary().length - 10} more employees
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  </div>
-</div>
+      {/* Per-User Summary Section - Updated with Holiday */}
+      <div className="per-user-summary-section">
+        <h2>📊 Employee-wise Summary</h2>
+        <div className="per-user-summary-table">
+          <table className="summary-table">
+            <thead>
+              <tr>
+                <th>Employee Name</th>
+                <th>Emp ID</th>
+                <th>Present</th>
+                <th>Absent</th>
+                <th>Holiday</th>
+                <th>Half Days</th>
+                <th>Permission</th>
+                <th>Attendance %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAttendance.length > 0 ? (
+                calculatePerUserSummary().slice(0, 10).map((user, index) => (
+                  <tr key={`${user.employeeId}-${index}`}>
+                    <td>{user.name}</td>
+                    <td>{user.employeeId}</td>
+                    <td className={user.present > 0 ? 'present-cell' : ''}>{user.present}</td>
+                    <td className={user.absent > 0 ? 'absent-cell' : ''}>{user.absent}</td>
+                    <td className={user.holiday > 0 ? 'holiday-cell' : ''}>{user.holiday || 0}</td>
+                    <td className={user.halfDays > 0 ? 'halfday-cell' : ''}>
+                      {user.halfDays > 0 ? `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` : '0'}
+                    </td>
+                    <td className={user.permission > 0 ? 'permission-cell' : ''}>{user.permission}</td>
+                    <td className={`attendance-cell ${user.attendanceRate === 'N/A' ? 'na' : user.attendanceRate >= 90 ? 'excellent' : user.attendanceRate >= 70 ? 'good' : 'poor'}`}>
+                      {user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="8" className="no-data">
+                    No data available
+                  </td>
+                </tr>
+              )}
+              {calculatePerUserSummary().length > 10 && (
+                <tr>
+                  <td colSpan="8" className="more-users">
+                    ... and {calculatePerUserSummary().length - 10} more employees
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* PDF Generation Status */}
-      {
-        generatingPDF && (
-          <div className="pdf-generation-status">
-            <p>⏳ Generating PDF via backend... This may take a moment.</p>
-            <div className="loading-spinner"></div>
-          </div>
-        )
-      }
+      {generatingPDF && (
+        <div className="pdf-generation-status">
+          <p>⏳ {generatingPDF ? 'Processing...' : 'Generating PDF via backend... This may take a moment.'}</p>
+          <div className="loading-spinner"></div>
+        </div>
+      )}
 
-      {/* Debug Info */}
-      {
-        process.env.NODE_ENV === 'development' && (
-          <div className="debug-info">
-            <small>
-              Data Status: {filteredAttendance.length} filtered records, {attendance.length} total records
-              <br />
-              Selected Dates: {selectedDates.length}
-              <br />
-              PDF Backend: {generatingPDF ? 'Processing...' : 'Ready'}
-            </small>
-          </div>
-        )
-      }
-    </div >
+     
+    </div>
   );
 }

@@ -1267,3 +1267,17 @@
   background: linear-gradient(135deg, #7B1FA2 0%, #512DA8 100%);
 }
 
+
+.holiday-btn {
+  background-color: #9C27B0 !important;
+  color: white !important;
+}
+
+.holiday-btn:hover {
+  background-color: #7B1FA2 !important;
+}
+
+.holiday-btn:disabled {
+  background-color: #E1BEE7 !important;
+  cursor: not-allowed;
+}
