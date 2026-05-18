@@ -28,7 +28,7 @@ import {
   CheckSquare,
   Square,
   Sun,
-  Moon
+  Moon, FileText
 } from 'lucide-react';
 import '../../assets/styles/AdminManualAttendance.css';
 
@@ -62,9 +62,9 @@ export default function AdminManualAttendance() {
   const [permissionReason, setPermissionReason] = useState('');
 
   // API Base URL
-  const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? 'https://attendance-backend-d4vi.onrender.com' // Use production URL even in development
-  : 'https://attendance-backend-d4vi.onrender.com';
+  const API_BASE_URL = process.env.NODE_ENV === 'development'
+    ? 'https://attendance-backend-d4vi.onrender.com' // Use production URL even in development
+    : 'https://attendance-backend-d4vi.onrender.com';
 
   // Handle permission submission
   const handlePermissionSubmit = async (userId) => {
@@ -275,20 +275,20 @@ export default function AdminManualAttendance() {
   const handleMarkAsHoliday = async () => {
     try {
       const dateToMark = holidayAction === 'today' ? new Date().toISOString().split('T')[0] : holidayDate;
-      
+
       const confirm = window.confirm(
         `Are you sure you want to mark ${dateToMark} as a holiday for ALL employees?\n\n` +
         `Reason: ${holidayReason}\n` +
         `This will override any existing attendance for that date.`
       );
-      
+
       if (!confirm) return;
-      
+
       const token = getToken();
       if (!token) return;
-      
+
       setLoading(true);
-      
+
       const response = await fetch(
         `${API_BASE_URL}/attendance/mark-holiday`,
         {
@@ -304,30 +304,30 @@ export default function AdminManualAttendance() {
           })
         }
       );
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to mark holiday');
       }
-      
+
       const result = await response.json();
-      
+
       showMessage(
         `✅ Successfully marked ${dateToMark} as holiday for ${result.affected_users} employees`,
         'success'
       );
-      
+
       // Refresh the attendance data
       if (dateToMark === selectedDate) {
         await fetchExistingAttendance();
       }
-      
+
       if (viewMode === 'viewer') {
         await fetchAllAttendance();
       }
-      
+
       setShowHolidayModal(false);
-      
+
     } catch (err) {
       console.error('Error marking holiday:', err);
       showMessage('Error marking holiday: ' + err.message, 'error');
@@ -526,8 +526,8 @@ export default function AdminManualAttendance() {
               record.half_day_type ? `half-day-${record.half_day_type}` :
                 record.permission_time ? 'permission' :
                   record.is_holiday ? 'holiday' :
-                  (record.check_in && !record.check_out ? 'checked-in' :
-                    (record.check_in && record.check_out ? 'present' : 'pending')),
+                    (record.check_in && !record.check_out ? 'checked-in' :
+                      (record.check_in && record.check_out ? 'present' : 'pending')),
             record: record,
             half_day_type: record.half_day_type,
             permission_time: record.permission_time,
@@ -556,7 +556,7 @@ export default function AdminManualAttendance() {
           status: existing.is_absent ? 'absent' :
             existing.half_day_type ? `half-day-${existing.half_day_type}` :
               existing.is_holiday ? 'holiday' :
-              existing.permission_time ? 'permission' : 'present',
+                existing.permission_time ? 'permission' : 'present',
           checkIn: existing.check_in ?
             new Date(existing.check_in).toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' }) :
             '09:30',
@@ -594,13 +594,14 @@ export default function AdminManualAttendance() {
     calculateStats(usersData);
   };
 
-  // Fetch all attendance for viewer mode
+  // Fetch all attendance with better error handling and debugging
   const fetchAllAttendance = async () => {
     try {
       setAttendanceLoading(true);
       const token = getToken();
       if (!token) return;
 
+      // Build URL with filters
       let url = `${API_BASE_URL}/attendance/filter?`;
       const params = [];
 
@@ -613,23 +614,395 @@ export default function AdminManualAttendance() {
 
       url += params.join('&');
 
-      const res = await fetch(url, {
+      console.log("Fetching attendance from:", url);
+
+      const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setAllAttendanceData(data.data || []);
+      console.log("Response status:", response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
+        throw new Error(`Failed to fetch: ${response.status}`);
       }
+
+      const data = await response.json();
+      console.log("Raw API response:", data);
+
+      // Handle different response structures
+      let attendanceArray = [];
+      if (Array.isArray(data)) {
+        attendanceArray = data;
+      } else if (data.data && Array.isArray(data.data)) {
+        attendanceArray = data.data;
+      } else if (data.attendance && Array.isArray(data.attendance)) {
+        attendanceArray = data.attendance;
+      } else if (data.records && Array.isArray(data.records)) {
+        attendanceArray = data.records;
+      } else {
+        console.warn("Unexpected data structure:", data);
+        attendanceArray = [];
+      }
+
+      console.log(`Found ${attendanceArray.length} attendance records`);
+
+      if (attendanceArray.length === 0) {
+        showMessage(`No attendance records found for ${filters.startDate} to ${filters.endDate}`, 'info');
+      }
+
+      setAllAttendanceData(attendanceArray);
+
+      // Calculate employee summary from the fetched data
+      calculateEmployeeSummary(attendanceArray);
+
     } catch (err) {
       console.error("Error fetching all attendance:", err);
       showMessage('Error fetching attendance data: ' + err.message, 'error');
+      setAllAttendanceData([]);
+      setEmployeeSummary([]);
     } finally {
       setAttendanceLoading(false);
     }
+  };
+
+  // Calculate employee-wise summary
+  const calculateEmployeeSummary = (attendanceData) => {
+    console.log("Calculating employee summary from", attendanceData.length, "records");
+
+    const summaryMap = new Map();
+
+    attendanceData.forEach(record => {
+      const userId = record.user_id;
+      const userName = record.user_info?.name || record.name || 'Unknown';
+      const employeeId = record.user_info?.employee_id || record.employee_id || 'N/A';
+      const department = record.user_info?.department || record.department || 'N/A';
+      const designation = record.user_info?.designation || record.designation || 'N/A';
+
+      if (!summaryMap.has(userId)) {
+        summaryMap.set(userId, {
+          userId,
+          name: userName,
+          employeeId: employeeId,
+          department: department,
+          designation: designation,
+          present: 0,
+          absent: 0,
+          holiday: 0,
+          halfDays: 0,
+          permission: 0,
+          totalDays: 0
+        });
+      }
+
+      const summary = summaryMap.get(userId);
+      summary.totalDays++;
+
+      // Determine status
+      const status = (record.status || '').toLowerCase();
+      if (status === 'present' || (record.check_in && !record.is_absent && !record.is_holiday)) {
+        summary.present++;
+      } else if (status === 'absent' || record.is_absent === true) {
+        summary.absent++;
+      } else if (status === 'holiday' || record.is_holiday === true) {
+        summary.holiday++;
+      } else if (status.includes('half') || record.half_day_type) {
+        summary.halfDays++;
+      } else if (status === 'permission' || record.permission_time) {
+        summary.permission++;
+      }
+    });
+
+    const summaryArray = Array.from(summaryMap.values());
+    console.log("Generated summary for", summaryArray.length, "employees");
+
+    setEmployeeSummary(summaryArray);
+  };
+
+  // Also add this helper function to test the API connection
+  const testAPIConnection = async () => {
+    try {
+      const token = getToken();
+      if (!token) return false;
+
+      console.log("Testing API connection...");
+      const response = await fetch(`${API_BASE_URL}/attendance/all?date=${new Date().toISOString().split('T')[0]}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log("API test response status:", response.status);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("API test data:", data);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("API test failed:", err);
+      return false;
+    }
+  };
+  // Helper function to get status display text
+  const getStatusDisplay = (item) => {
+    if (item.status?.toLowerCase() === 'holiday' || item.is_holiday) return 'Holiday';
+    if (item.status?.toLowerCase() === 'absent' || item.is_absent) return 'Absent';
+    if (item.status?.toLowerCase() === 'permission' || item.permission_time) return 'Permission';
+    if (item.half_day_type) return `Half Day (${item.half_day_type === 'morning' ? 'AM' : 'PM'})`;
+    if (item.check_in && item.check_out) return 'Checked Out';
+    if (item.check_in && !item.check_out) return 'Checked In';
+    if (item.status === 'present') return 'Present';
+    return item.status || 'Pending';
+  };
+
+  // Helper function to get status class for styling
+  const getStatusClass = (item) => {
+    if (item.status?.toLowerCase() === 'holiday' || item.is_holiday) return 'holiday';
+    if (item.status?.toLowerCase() === 'absent' || item.is_absent) return 'absent';
+    if (item.status?.toLowerCase() === 'permission' || item.permission_time) return 'permission';
+    if (item.half_day_type) return 'halfday';
+    if (item.check_in && item.check_out) return 'checked-out';
+    return 'pending';
+  };
+
+  const formatDateDayMonth = (dateString) => {
+    if (!dateString) return '-';
+
+    try {
+      const date = new Date(dateString);
+      const day = date.getDate();
+      const month = date.toLocaleString('en-US', { month: 'short' });
+      return `${day} ${month}`;
+    } catch (e) {
+      return dateString;
+    }
+  };
+  // Helper function to calculate time difference
+  const calculateTimeDifference = (checkIn, checkOut) => {
+    try {
+      const parseTime = (timeStr) => {
+        if (!timeStr) return null;
+        let time = timeStr.toLowerCase();
+        let hours = 0, minutes = 0;
+
+        if (time.includes('am') || time.includes('pm')) {
+          let [timePart, modifier] = time.split(' ');
+          let [hour, minute] = timePart.split(':');
+          hours = parseInt(hour);
+          minutes = parseInt(minute);
+          if (modifier === 'pm' && hours !== 12) hours += 12;
+          if (modifier === 'am' && hours === 12) hours = 0;
+        } else {
+          let [hour, minute] = time.split(':');
+          hours = parseInt(hour);
+          minutes = parseInt(minute);
+        }
+        return hours * 60 + minutes;
+      };
+
+      const inMinutes = parseTime(checkIn);
+      const outMinutes = parseTime(checkOut);
+
+      if (inMinutes && outMinutes) {
+        const diff = outMinutes - inMinutes;
+        const hours = Math.floor(diff / 60);
+        const minutes = diff % 60;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
+      }
+      return '-';
+    } catch (e) {
+      return '-';
+    }
+  };
+  // Call this in useEffect to test connection
+  useEffect(() => {
+    const init = async () => {
+      await testAPIConnection();
+      await fetchUsers(); // If you have this method
+      await fetchAllAttendance();
+    };
+    init();
+  }, []);
+
+  const renderEmployeeSummary = () => {
+    if (employeeSummary.length === 0) {
+      return (
+        <div className="empty-state">
+          <FileText size={48} />
+          <h3>No Data Available</h3>
+          <p>No attendance records found for the selected date range.</p>
+          <p className="text-muted">Try:</p>
+          <ul>
+            <li>Expanding the date range</li>
+            <li>Checking if attendance has been marked</li>
+            <li>Verifying the API connection</li>
+          </ul>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div className="table-container">
+          <table className="records-table">
+            <thead>
+              <tr>
+                <th style={{ width: '110px' }}>Date</th>
+                <th style={{ width: '100px' }}>Employee ID</th>
+                <th style={{ width: '180px' }}>Employee Name</th>
+                <th style={{ width: '150px' }}>Designation</th>
+                <th style={{ width: '100px' }}>Check In</th>
+                <th style={{ width: '100px' }}>Check Out</th>
+                <th style={{ width: '100px' }}>Total Time</th>
+                <th style={{ width: '110px' }}>Status</th>
+                <th style={{ width: '120px' }}>Absence Reason</th>
+                <th style={{ width: '80px' }}>Type</th>
+                <th style={{ width: '80px' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedData.map((item, index) => {
+                const isHoliday = item.status?.toLowerCase() === 'holiday' || item.is_holiday;
+                const isAbsent = item.status?.toLowerCase() === 'absent' || item.is_absent;
+                const isPresent = item.status?.toLowerCase() === 'present' || item.check_in;
+
+                return (
+                  <tr key={index} className={`status-row ${isHoliday ? 'holiday-row' : isAbsent ? 'absent-row' : 'present-row'}`}>
+                    <td>
+                      <div className="date-cell">
+                        <Calendar size={14} />
+                        <span className="date-text">{formatDateDayMonth(item.date)}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="employee-id">{item.user_info?.employee_id || item.employee_id || '-'}</span>
+                    </td>
+                    <td>
+                    <div className="employee-cell">
+  <div className="employee-avatar">
+    {item.user_info?.profile_url ? (
+      <img src={item.user_info.profile_url} alt="" />
+    ) : (
+      <User size={16} />
+    )}
+  </div>
+  <div className="employee-name">
+    <strong>{item.user_info?.name || item.name || '-'}</strong>
+  </div>
+</div>
+                    </td>
+                    <td>
+                      <div className="designation-cell">
+                        <Briefcase size={12} />
+                        <span>{item.user_info?.designation || item.designation || '-'}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="time-cell">
+                        {item.check_in_ist || item.check_in || (item.check_in_time ?
+                          new Date(item.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-')}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="time-cell">
+                        {item.check_out_ist || item.check_out || (item.check_out_time ?
+                          new Date(item.check_out_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-')}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="total-time-cell">
+                        {item.total_time || item.duration ||
+                          (item.check_in && item.check_out ? calculateTimeDifference(item.check_in, item.check_out) : '-')}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`status-badge status-${getStatusClass(item)}`}>
+                        {getStatusDisplay(item)}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="reason-cell">
+                        {item.absence_reason || item.permission_reason || item.absenceReason || '-'}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="type-badge">
+                        {item.manual_entry ? 'Manual' : (item.is_auto ? 'Auto' : 'System')}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className="btn-view-edit"
+                        onClick={() => handleEditRecord(item)}
+                        title="Edit record"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button
+              className="pagination-btn"
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft size={16} />
+              <span>Previous</span>
+            </button>
+
+            <div className="pagination-numbers">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNumber;
+                if (totalPages <= 5) {
+                  pageNumber = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNumber = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNumber = totalPages - 4 + i;
+                } else {
+                  pageNumber = currentPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={pageNumber}
+                    className={`pagination-number ${currentPage === pageNumber ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              className="pagination-btn"
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+            >
+              <span>Next</span>
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+
+        <div className="records-info">
+          Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, allAttendanceData.length)} of {allAttendanceData.length} records
+          <span className="page-info">• Page {currentPage} of {totalPages}</span>
+        </div>
+      </>
+    );
   };
 
   // Handle edit attendance button click
@@ -1473,7 +1846,7 @@ export default function AdminManualAttendance() {
         container.style.overflowX = 'auto';
         container.style.overflowY = 'visible';
         container.style.maxWidth = 'none';
-        
+
         const table = container.querySelector('table');
         if (table) {
           table.style.minWidth = '1200px';
@@ -1484,7 +1857,7 @@ export default function AdminManualAttendance() {
 
     fixTableScroll();
     window.addEventListener('resize', fixTableScroll);
-    
+
     return () => window.removeEventListener('resize', fixTableScroll);
   }, [users, selectedDate, viewMode, filters]);
 
@@ -1543,8 +1916,8 @@ export default function AdminManualAttendance() {
           </div>
         </div>
         <div className="header-right">
-          <button 
-            className="btn-holiday" 
+          <button
+            className="btn-holiday"
             onClick={() => setShowHolidayModal(true)}
             title="Mark a date as holiday"
           >
@@ -1832,7 +2205,7 @@ export default function AdminManualAttendance() {
             {/* Attendance Table */}
             <div className="attendance-table-card">
               <div className="card-header">
-                <h3>Attendance for {selectedDate}</h3>
+                <h3>Attendance for {formatDateDayMonth(selectedDate)}</h3>
                 <div className="header-actions">
                   <button
                     className={`btn-filter ${showFilters ? 'active' : ''}`}
@@ -1893,7 +2266,7 @@ export default function AdminManualAttendance() {
                       maxWidth: 'none'
                     }}>
                       <table className="attendance-table" style={{
-                        minWidth: '1400px',
+                        minWidth: '1500px', // Increased width to accommodate date column
                         width: '100%',
                         tableLayout: 'fixed'
                       }}>
@@ -1906,6 +2279,7 @@ export default function AdminManualAttendance() {
                                 onChange={selectAllUsers}
                               />
                             </th>
+                            <th style={{ width: '120px' }}>Date</th> {/* Added Date column */}
                             <th style={{ width: '200px' }}>Employee</th>
                             <th style={{ width: '120px' }}>Designation</th>
                             <th style={{ width: '120px' }}>Department</th>
@@ -1936,6 +2310,17 @@ export default function AdminManualAttendance() {
                                       checked={selectedUsers.includes(user.id)}
                                       onChange={() => toggleUserSelection(user.id)}
                                     />
+                                  </td>
+                                  <td>
+                                    <div className="date-cell">
+                                      <Calendar size={14} />
+                                      <span
+                                        className="date-text"
+                                        title={selectedDate}
+                                      >
+                                        {formatDateDayMonth(selectedDate)}
+                                      </span>
+                                    </div>
                                   </td>
                                   <td>
                                     <div className="user-cell">
@@ -2107,11 +2492,15 @@ export default function AdminManualAttendance() {
                                 </tr>
                                 {isExpanded && (
                                   <tr className="details-row">
-                                    <td colSpan="7">
+                                    <td colSpan="8"> {/* Updated colSpan to 8 */}
                                       <div className="user-details">
                                         <div className="detail-section">
                                           <h4>Attendance Details</h4>
                                           <div className="detail-grid">
+                                            <div className="detail-item">
+                                              <span className="detail-label">Date:</span>
+                                              <span className="detail-value">{selectedDate}</span>
+                                            </div>
                                             <div className="detail-item">
                                               <span className="detail-label">Status:</span>
                                               <span className={`detail-value status-${record.status}`}>
@@ -2205,7 +2594,7 @@ export default function AdminManualAttendance() {
                         </tbody>
                       </table>
                     </div>
-                    
+
                     {/* Scroll hint */}
                     <div className="scroll-hint">
                       <ChevronLeft size={16} />
@@ -2214,7 +2603,7 @@ export default function AdminManualAttendance() {
                     </div>
                   </div>
 
-                  {/* Pagination */}
+                  {/* Pagination - THIS IS WHERE IT SHOULD BE */}
                   {totalPages > 1 && (
                     <div className="pagination">
                       <button
@@ -2260,158 +2649,273 @@ export default function AdminManualAttendance() {
           </>
         ) : (
           <>
-            {/* Viewer Mode */}
-            <div className="viewer-card">
-              <div className="card-header">
-                <h3>Attendance Records Viewer</h3>
-                <div className="header-actions">
-                  <button className="btn-export" onClick={exportToCSV}>
-                    <Download size={16} />
-                    <span>Export CSV</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="filter-panel">
-                <div className="filter-grid">
-                  <div className="form-group">
-                    <label>Employee Name</label>
-                    <div className="input-with-icon">
-                      <Search size={16} />
-                      <input
-                        type="text"
-                        name="name"
-                        value={filters.name}
-                        onChange={handleFilterChange}
-                        placeholder="Search by name..."
-                      />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Date Range</label>
-                    <div className="date-range">
-                      <input
-                        type="date"
-                        name="startDate"
-                        value={filters.startDate}
-                        onChange={handleFilterChange}
-                      />
-                      <span>to</span>
-                      <input
-                        type="date"
-                        name="endDate"
-                        value={filters.endDate}
-                        onChange={handleFilterChange}
-                      />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Status</label>
-                    <select
-                      name="status"
-                      value={filters.status}
-                      onChange={handleFilterChange}
-                    >
-                      <option value="all">All Status</option>
-                      <option value="present">Present</option>
-                      <option value="absent">Absent</option>
-                      <option value="half-day">Half Day</option>
-                      <option value="permission">Permission</option>
-                      <option value="holiday">Holiday</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Department</label>
-                    <select
-                      name="department"
-                      value={filters.department}
-                      onChange={handleFilterChange}
-                    >
-                      <option value="all">All Departments</option>
-                      {getDepartments().map(dept => (
-                        <option key={dept} value={dept}>{dept}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <button className="btn-apply-filters" onClick={fetchAllAttendance}>
-                      Apply Filters
+            {viewMode === 'viewer' ? (
+              <div className="viewer-card">
+                <div className="card-header">
+                  <h3>Attendance Records Viewer</h3>
+                  <div className="header-actions">
+                    <button className="btn-export" onClick={exportToCSV}>
+                      <Download size={16} />
+                      <span>Export CSV</span>
                     </button>
                   </div>
                 </div>
-              </div>
 
-              {attendanceLoading ? (
-                <div className="loading-state">
-                  <div className="spinner"></div>
-                  <p>Loading attendance data...</p>
+                <div className="filter-panel">
+                  <div className="filter-grid">
+                    <div className="form-group">
+                      <label>Employee Name</label>
+                      <div className="input-with-icon">
+                        <Search size={16} />
+                        <input
+                          type="text"
+                          name="name"
+                          value={filters.name}
+                          onChange={handleFilterChange}
+                          placeholder="Search by name..."
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Date Range</label>
+                      <div className="date-range">
+                        <input
+                          type="date"
+                          name="startDate"
+                          value={filters.startDate}
+                          onChange={handleFilterChange}
+                        />
+                        <span>to</span>
+                        <input
+                          type="date"
+                          name="endDate"
+                          value={filters.endDate}
+                          onChange={handleFilterChange}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Status</label>
+                      <select
+                        name="status"
+                        value={filters.status}
+                        onChange={handleFilterChange}
+                      >
+                        <option value="all">All Status</option>
+                        <option value="present">Present</option>
+                        <option value="absent">Absent</option>
+                        <option value="half-day">Half Day</option>
+                        <option value="permission">Permission</option>
+                        <option value="holiday">Holiday</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Department</label>
+                      <select
+                        name="department"
+                        value={filters.department}
+                        onChange={handleFilterChange}
+                      >
+                        <option value="all">All Departments</option>
+                        {getDepartments().map(dept => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <button className="btn-apply-filters" onClick={fetchAllAttendance}>
+                        Apply Filters
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              ) : allAttendanceData.length === 0 ? (
-                <div className="empty-state">
-                  <FileText size={48} />
-                  <h3>No Records Found</h3>
-                  <p>Try adjusting your filters</p>
-                </div>
-              ) : (
-                <div className="table-container">
-                  <table className="records-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Employee</th>
-                        <th>Department</th>
-                        <th>Check In</th>
-                        <th>Check Out</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allAttendanceData.slice(0, 50).map((item, index) => {
-                        const user = users.find(u => u.id === item.user_id) || item.user_info;
-                        return (
-                          <tr key={index} className={`status-${item.status?.toLowerCase().replace(' ', '-')}`}>
-                            <td>{item.date}</td>
-                            <td>
-                              <div className="user-cell">
-                                <div className="user-avatar">
-                                  {item.user_info?.profile_url ? (
-                                    <img src={item.user_info.profile_url} alt={item.user_info.name} />
-                                  ) : (
-                                    <User size={20} />
-                                  )}
-                                </div>
-                                <div className="user-info">
-                                  <strong>{item.user_info?.name || 'Unknown'}</strong>
-                                  <small>{item.user_info?.employee_id || 'N/A'}</small>
-                                </div>
-                              </div>
-                            </td>
-                            <td>{item.user_info?.department || 'N/A'}</td>
-                            <td>{item.check_in_ist || '--:--'}</td>
-                            <td>{item.check_out_ist || '--:--'}</td>
-                            <td>
-                              <span className={`status-badge status-${item.status?.toLowerCase().replace(' ', '-')}`}>
-                                {item.status || 'Unknown'}
-                              </span>
-                            </td>
-                            <td>
-                              <button
-                                className="btn-edit"
-                                onClick={() => user && handleEditAttendance(user, item.date)}
-                                title="Edit record"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                            </td>
+
+                {attendanceLoading ? (
+                  <div className="loading-state">
+                    <div className="spinner"></div>
+                    <p>Loading attendance data...</p>
+                  </div>
+                ) : allAttendanceData.length === 0 ? (
+                  <div className="empty-state">
+                    <FileText size={48} />
+                    <h3>No Records Found</h3>
+                    <p>Try adjusting your filters</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="table-container">
+                      <table 
+  className="records-table" 
+  style={{ 
+    wordBreak: 'keep-all',
+    whiteSpace: 'nowrap'
+  }}
+>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '110px' }}>Date</th>
+                            <th style={{ width: '100px' }}>Employee ID</th>
+                            <th style={{ width: '180px' }}>Employee Name</th>
+                            <th style={{ width: '150px' }}>Designation</th>
+                            <th style={{ width: '100px' }}>Check In</th>
+                            <th style={{ width: '100px' }}>Check Out</th>
+                            <th style={{ width: '100px' }}>Total Time</th>
+                            <th style={{ width: '110px' }}>Status</th>
+                            <th style={{ width: '120px' }}>Absence Reason</th>
+                            <th style={{ width: '80px' }}>Type</th>
+                            <th style={{ width: '80px' }}>Actions</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                        </thead>
+                        <tbody>
+                          {allAttendanceData
+                            .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                            .map((item, index) => {
+                              const isHoliday = item.status?.toLowerCase() === 'holiday' || item.is_holiday;
+                              const isAbsent = item.status?.toLowerCase() === 'absent' || item.is_absent;
+
+                              return (
+                                <tr key={index} className={`status-row ${isHoliday ? 'holiday-row' : isAbsent ? 'absent-row' : 'present-row'}`}>
+                                  <td>
+                                    <div className="date-cell">
+                                      <Calendar size={14} />
+                                      <span
+                                        className="date-text"
+                                        title={item.date}
+                                      >
+                                        {formatDateDayMonth(item.date)}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <span className="employee-id">{item.user_info?.employee_id || item.employee_id || '-'}</span>
+                                  </td>
+                                  <td>
+                                   <div className="employee-cell">
+  <div className="employee-avatar">
+    {item.user_info?.profile_url ? (
+      <img src={item.user_info.profile_url} alt="" />
+    ) : (
+      <User size={16} />
+    )}
+  </div>
+  <div className="employee-name">
+    <strong>{item.user_info?.name || item.name || '-'}</strong>
+  </div>
+</div>
+                                  </td>
+                                  <td>
+                                    <div className="designation-cell">
+                                      <Briefcase size={12} />
+                                      <span>{item.user_info?.designation || item.designation || '-'}</span>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="time-cell">
+                                      {item.check_in_ist || item.check_in || (item.check_in_time ?
+                                        new Date(item.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-')}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="time-cell">
+                                      {item.check_out_ist || item.check_out || (item.check_out_time ?
+                                        new Date(item.check_out_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-')}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="total-time-cell">
+                                      {item.total_time || item.duration || '-'}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <span className={`status-badge status-${getStatusClass(item)}`}>
+                                      {getStatusDisplay(item)}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="reason-cell">
+                                      {item.absence_reason || item.permission_reason || item.absenceReason || '-'}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <span className="type-badge">
+                                      {item.manual_entry ? 'Manual' : (item.is_auto ? 'Auto' : 'System')}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <button
+                                      className="btn-view-edit"
+                                      onClick={() => {
+                                        const user = users.find(u => u.id === item.user_id);
+                                        if (user) handleEditAttendance(user, item.date);
+                                      }}
+                                      title="Edit record"
+                                    >
+                                      <Edit2 size={14} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination for viewer mode */}
+                    {Math.ceil(allAttendanceData.length / itemsPerPage) > 1 && (
+                      <div className="pagination">
+                        <button
+                          className="pagination-btn"
+                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft size={16} />
+                          <span>Previous</span>
+                        </button>
+
+                        <div className="pagination-numbers">
+                          {Array.from({ length: Math.min(5, Math.ceil(allAttendanceData.length / itemsPerPage)) }, (_, i) => {
+                            let pageNumber;
+                            const totalViewerPages = Math.ceil(allAttendanceData.length / itemsPerPage);
+                            if (totalViewerPages <= 5) {
+                              pageNumber = i + 1;
+                            } else if (currentPage <= 3) {
+                              pageNumber = i + 1;
+                            } else if (currentPage >= totalViewerPages - 2) {
+                              pageNumber = totalViewerPages - 4 + i;
+                            } else {
+                              pageNumber = currentPage - 2 + i;
+                            }
+                            return (
+                              <button
+                                key={pageNumber}
+                                className={`pagination-number ${currentPage === pageNumber ? 'active' : ''}`}
+                                onClick={() => setCurrentPage(pageNumber)}
+                              >
+                                {pageNumber}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          className="pagination-btn"
+                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(allAttendanceData.length / itemsPerPage)))}
+                          disabled={currentPage === Math.ceil(allAttendanceData.length / itemsPerPage)}
+                        >
+                          <span>Next</span>
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="records-info">
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, allAttendanceData.length)} of {allAttendanceData.length} records
+                      <span className="page-info">• Page {currentPage} of {Math.ceil(allAttendanceData.length / itemsPerPage)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
           </>
         )}
       </main>
@@ -2504,8 +3008,8 @@ export default function AdminManualAttendance() {
               <button className="btn-secondary" onClick={() => setShowHolidayModal(false)}>
                 Cancel
               </button>
-              <button 
-                className="btn-primary btn-holiday" 
+              <button
+                className="btn-primary btn-holiday"
                 onClick={handleMarkAsHoliday}
                 disabled={loading}
               >
@@ -2908,4 +3412,4 @@ export default function AdminManualAttendance() {
       </footer>
     </div>
   );
-}
+};
