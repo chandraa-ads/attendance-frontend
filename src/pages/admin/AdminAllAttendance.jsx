@@ -140,132 +140,130 @@ useEffect(() => {
     return dates;
   };
 
-  // UPDATED: Calculate per-user statistics with HOLIDAY support
-  const calculatePerUserSummary = () => {
-    const userMap = {};
+ // UPDATED: Calculate per-user statistics - Holiday included in Present
+const calculatePerUserSummary = () => {
+  const userMap = {};
 
-    // Group data by user
-    filteredAttendance.forEach(record => {
-      const userId = record.user_id;
-      const userName = record.user_info?.name || 'Unknown';
-      const employeeId = record.user_info?.employee_id || 'N/A';
+  // Group data by user
+  filteredAttendance.forEach(record => {
+    const userId = record.user_id;
+    const userName = record.user_info?.name || 'Unknown';
+    const employeeId = record.user_info?.employee_id || 'N/A';
 
-      if (!userMap[userId]) {
-        userMap[userId] = {
-          name: userName,
-          employeeId: employeeId,
-          department: record.user_info?.designation || 'N/A',
-          present: 0,
-          absent: 0,
-          holiday: 0,
-          halfDays: 0,
-          halfDayFN: 0,
-          halfDayAN: 0,
-          permission: 0,
-          totalDaysWithRecords: 0,
-          totalWorkMinutes: 0,
-          uniqueDates: new Set()
-        };
+    if (!userMap[userId]) {
+      userMap[userId] = {
+        name: userName,
+        employeeId: employeeId,
+        department: record.user_info?.designation || 'N/A',
+        present: 0,
+        absent: 0,
+        holiday: 0, // Keep for internal calculation
+        halfDays: 0,
+        halfDayFN: 0,
+        halfDayAN: 0,
+        permission: 0,
+        totalDaysWithRecords: 0,
+        totalWorkMinutes: 0,
+        uniqueDates: new Set()
+      };
+    }
+
+    const user = userMap[userId];
+
+    // Add date to unique dates set
+    if (record.date) {
+      user.uniqueDates.add(record.date);
+    }
+
+    user.totalDaysWithRecords++;
+
+    // Check status with HOLIDAY support
+    const isHoliday = isHolidayRecord(record);
+
+    if (isHoliday) {
+      user.holiday++;
+      user.present++; // ADD HOLIDAY TO PRESENT COUNT
+    } else if (record.is_absent) {
+      user.absent++;
+    } else if (record.half_day_type) {
+      user.halfDays++;
+      if (record.half_day_type.includes('morning') || record.half_day_type.includes('FN') ||
+        record.half_day_type.includes('forenoon')) {
+        user.halfDayFN++;
+      } else if (record.half_day_type.includes('afternoon') || record.half_day_type.includes('AN')) {
+        user.halfDayAN++;
       }
-
-      const user = userMap[userId];
-
-      // Add date to unique dates set
-      if (record.date) {
-        user.uniqueDates.add(record.date);
+    } else if (record.permission_time) {
+      user.permission++;
+    } else if (record.check_in && record.check_out) {
+      user.present++;
+      if (record.total_time_minutes) {
+        user.totalWorkMinutes += record.total_time_minutes;
       }
+    }
+  });
 
-      user.totalDaysWithRecords++;
+  // Convert to array and calculate statistics
+  return Object.values(userMap).map(user => {
+    // Include holiday in total working days calculation
+    const totalWorkingDays = user.present + user.absent + user.halfDays + user.permission;
 
-      // Check status with HOLIDAY support
-      const isHoliday = isHolidayRecord(record);
-
-      if (isHoliday) {
-        user.holiday++;
-      } else if (record.is_absent) {
-        user.absent++;
-      } else if (record.half_day_type) {
-        user.halfDays++;
-        if (record.half_day_type.includes('morning') || record.half_day_type.includes('FN') ||
-          record.half_day_type.includes('forenoon')) {
-          user.halfDayFN++;
-        } else if (record.half_day_type.includes('afternoon') || record.half_day_type.includes('AN')) {
-          user.halfDayAN++;
-        }
-      } else if (record.permission_time) {
-        user.permission++;
-      } else if (record.check_in && record.check_out) {
-        user.present++;
-        if (record.total_time_minutes) {
-          user.totalWorkMinutes += record.total_time_minutes;
-        }
-      }
-    });
-
-    // Convert to array and calculate statistics
-    return Object.values(userMap).map(user => {
-      // Include holiday in total working days calculation
-      const totalWorkingDays = user.present + user.absent + user.halfDays + user.permission + user.holiday;
-
-      // If no working days at all, show N/A
-      if (totalWorkingDays === 0) {
-        return {
-          ...user,
-          attendanceRate: 'N/A',
-          totalWorkingDays: 0,
-          uniqueDateCount: user.uniqueDates.size
-        };
-      }
-
-      // Calculate percentage based on actual working days (including holiday as 100% attendance)
-      const attendanceRate = ((user.present + user.holiday + (user.halfDays * 0.5) + (user.permission * 0.75)) / totalWorkingDays * 100).toFixed(1);
-
+    // If no working days at all, show N/A
+    if (totalWorkingDays === 0) {
       return {
         ...user,
-        attendanceRate,
-        totalWorkingDays,
+        attendanceRate: 'N/A',
+        totalWorkingDays: 0,
         uniqueDateCount: user.uniqueDates.size
       };
-    }).sort((a, b) => {
-      // Sort with N/A at the bottom
-      if (a.attendanceRate === 'N/A') return 1;
-      if (b.attendanceRate === 'N/A') return -1;
-      return parseFloat(b.attendanceRate) - parseFloat(a.attendanceRate);
-    });
-  };
+    }
 
-  // UPDATED: Calculate overall statistics with HOLIDAY support
-  const calculateOverallStats = () => {
-    const perUserSummary = calculatePerUserSummary();
-
-    const totalPresent = perUserSummary.reduce((sum, user) => sum + user.present, 0);
-    const totalAbsent = perUserSummary.reduce((sum, user) => sum + user.absent, 0);
-    const totalHoliday = perUserSummary.reduce((sum, user) => sum + (user.holiday || 0), 0);
-    const totalHalfDays = perUserSummary.reduce((sum, user) => sum + user.halfDays, 0);
-    const halfDayFN = perUserSummary.reduce((sum, user) => sum + user.halfDayFN, 0);
-    const halfDayAN = perUserSummary.reduce((sum, user) => sum + user.halfDayAN, 0);
-    const totalPermission = perUserSummary.reduce((sum, user) => sum + user.permission, 0);
-    const totalDaysWithRecords = perUserSummary.reduce((sum, user) => sum + user.totalDays, 0);
-    const uniqueDatesCount = new Set(
-      filteredAttendance.map(record => record.date)
-    ).size;
+    // Calculate percentage based on actual working days (holiday already included in present)
+    const attendanceRate = ((user.present + (user.halfDays * 0.5) + (user.permission * 0.75)) / totalWorkingDays * 100).toFixed(1);
 
     return {
-      totalPresent,
-      totalAbsent,
-      totalHoliday,
-      totalHalfDays,
-      halfDayFN,
-      halfDayAN,
-      totalPermission,
-      totalDaysWithRecords,
-      uniqueDatesCount,
-      averageAttendanceRate: perUserSummary.length > 0
-        ? (perUserSummary.reduce((sum, user) => sum + parseFloat(user.attendanceRate), 0) / perUserSummary.length).toFixed(1) + '%'
-        : '0%'
+      ...user,
+      attendanceRate,
+      totalWorkingDays,
+      uniqueDateCount: user.uniqueDates.size
     };
-  };
+  }).sort((a, b) => {
+    // Sort with N/A at the bottom
+    if (a.attendanceRate === 'N/A') return 1;
+    if (b.attendanceRate === 'N/A') return -1;
+    return parseFloat(b.attendanceRate) - parseFloat(a.attendanceRate);
+  });
+};
 
+// UPDATED: Calculate overall statistics with HOLIDAY included in Present
+const calculateOverallStats = () => {
+  const perUserSummary = calculatePerUserSummary();
+
+  const totalPresent = perUserSummary.reduce((sum, user) => sum + user.present, 0);
+  const totalAbsent = perUserSummary.reduce((sum, user) => sum + user.absent, 0);
+  const totalHalfDays = perUserSummary.reduce((sum, user) => sum + user.halfDays, 0);
+  const halfDayFN = perUserSummary.reduce((sum, user) => sum + user.halfDayFN, 0);
+  const halfDayAN = perUserSummary.reduce((sum, user) => sum + user.halfDayAN, 0);
+  const totalPermission = perUserSummary.reduce((sum, user) => sum + user.permission, 0);
+  const totalDaysWithRecords = perUserSummary.reduce((sum, user) => sum + user.totalDays, 0);
+  const uniqueDatesCount = new Set(
+    filteredAttendance.map(record => record.date)
+  ).size;
+
+  return {
+    totalPresent,
+    totalAbsent,
+    totalHalfDays,
+    halfDayFN,
+    halfDayAN,
+    totalPermission,
+    totalDaysWithRecords,
+    uniqueDatesCount,
+    averageAttendanceRate: perUserSummary.length > 0
+      ? (perUserSummary.reduce((sum, user) => sum + parseFloat(user.attendanceRate), 0) / perUserSummary.length).toFixed(1) + '%'
+      : '0%'
+  };
+};
   const fetchAttendance = async () => {
     try {
       setLoading(true);
@@ -727,287 +725,286 @@ useEffect(() => {
     }
   };
 
-  // UPDATED: Detailed PDF export with HOLIDAY support
-  const handleExportUserSummaryPDF = () => {
-    try {
-      if (filteredAttendance.length === 0) {
-        alert('No data to export!');
-        return;
+  // UPDATED: Detailed PDF export with HOLIDAY included in Present
+const handleExportUserSummaryPDF = () => {
+  try {
+    if (filteredAttendance.length === 0) {
+      alert('No data to export!');
+      return;
+    }
+
+    const perUserSummary = calculatePerUserSummary();
+    const overallStats = calculateOverallStats();
+
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    doc.setFontSize(18);
+    doc.setTextColor(40, 40, 40);
+    doc.text('ATTENDANCE DETAILED REPORT', 145, 20, null, null, 'center');
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 145, 28, null, null, 'center');
+
+    let dateRange = '';
+    if (filters.date) {
+      dateRange = `Date: ${filters.date}`;
+    } else if (filters.startDate && filters.endDate) {
+      dateRange = `Date Range: ${filters.startDate} to ${filters.endDate}`;
+    } else {
+      dateRange = 'All Dates';
+    }
+    doc.text(dateRange, 145, 35, null, null, 'center');
+
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.text('ATTENDANCE RECORDS', 20, 50);
+
+    const headers = [
+      'Date', 'Emp ID', 'Name', 'Designation',
+      'Check In', 'Check Out', 'Total Time', 'Status', 'Absence Reason', 'Type'
+    ];
+
+    const colWidths = [18, 25, 35, 30, 20, 20, 20, 20, 35, 15];
+
+    let y = 60;
+
+    doc.setFillColor(52, 152, 219);
+    doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+
+    let xPos = 20;
+    headers.forEach((header, i) => {
+      doc.text(header, xPos + 2, y + 5);
+      xPos += colWidths[i];
+    });
+
+    y += 10;
+    doc.setTextColor(40, 40, 40);
+    doc.setFontSize(7);
+
+    filteredAttendance.forEach((record, index) => {
+      if (y > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        y = 20;
+
+        doc.setFillColor(52, 152, 219);
+        doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
+        doc.setTextColor(255, 255, 255);
+
+        xPos = 20;
+        headers.forEach((header, i) => {
+          doc.text(header, xPos + 2, y + 5);
+          xPos += colWidths[i];
+        });
+
+        y += 10;
+        doc.setTextColor(40, 40, 40);
       }
 
-      const perUserSummary = calculatePerUserSummary();
-      const overallStats = calculateOverallStats();
-
-      const doc = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      doc.setFontSize(18);
-      doc.setTextColor(40, 40, 40);
-      doc.text('ATTENDANCE DETAILED REPORT', 145, 20, null, null, 'center');
-
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 145, 28, null, null, 'center');
-
-      let dateRange = '';
-      if (filters.date) {
-        dateRange = `Date: ${filters.date}`;
-      } else if (filters.startDate && filters.endDate) {
-        dateRange = `Date Range: ${filters.startDate} to ${filters.endDate}`;
-      } else {
-        dateRange = 'All Dates';
+      if (index % 2 === 0) {
+        doc.setFillColor(245, 245, 245);
+        doc.rect(20, y, colWidths.reduce((a, b) => a + b), 7, 'F');
       }
-      doc.text(dateRange, 145, 35, null, null, 'center');
 
-      doc.setFontSize(14);
-      doc.setTextColor(0, 0, 0);
-      doc.text('ATTENDANCE RECORDS', 20, 50);
+      const getStatus = (record) => {
+        if (isHolidayRecord(record)) return 'Holiday';
+        if (record.is_absent) return 'Absent';
+        if (record.check_in && !record.check_out) return 'Checked In';
+        if (record.check_in && record.check_out) return 'Checked Out';
+        return 'Not Checked In';
+      };
 
-      const headers = [
-        'Date', 'Emp ID', 'Name', 'Designation',
-        'Check In', 'Check Out', 'Total Time', 'Status', 'Absence Reason', 'Type'
+      const formatTime = (datetime) => {
+        if (!datetime) return "-";
+        try {
+          const dateObj = new Date(datetime);
+          return dateObj.toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour12: true,
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        } catch {
+          return "-";
+        }
+      };
+
+      const recordData = [
+        record.date || '-',
+        record.user_info?.employee_id || '-',
+        record.user_info?.name?.substring(0, 15) || '-',
+        record.user_info?.designation?.substring(0, 12) || '-',
+        formatTime(record.check_in),
+        formatTime(record.check_out),
+        record.total_time_formatted?.substring(0, 8) || '-',
+        getStatus(record),
+        record.absence_reason?.substring(0, 20) || '-',
+        record.manual_entry ? 'Manual' : 'Auto'
       ];
 
-      const colWidths = [18, 25, 35, 30, 20, 20, 20, 20, 35, 15];
+      xPos = 20;
+      recordData.forEach((cell, i) => {
+        if (i === 7) {
+          const status = cell.toLowerCase();
+          if (status.includes('holiday')) {
+            doc.setTextColor(156, 39, 176);
+          } else if (status.includes('absent')) {
+            doc.setTextColor(211, 47, 47);
+          } else if (status.includes('present') || status.includes('checked out')) {
+            doc.setTextColor(46, 125, 50);
+          } else if (status.includes('checked in')) {
+            doc.setTextColor(245, 124, 0);
+          } else {
+            doc.setTextColor(100, 100, 100);
+          }
+        } else {
+          doc.setTextColor(40, 40, 40);
+        }
 
-      let y = 60;
-
-      doc.setFillColor(52, 152, 219);
-      doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(8);
-
-      let xPos = 20;
-      headers.forEach((header, i) => {
-        doc.text(header, xPos + 2, y + 5);
+        doc.text(cell.toString(), xPos + 2, y + 5);
         xPos += colWidths[i];
       });
 
-      y += 10;
+      y += 7;
+    });
+
+    if (perUserSummary.length > 0) {
+      doc.addPage();
+
+      doc.setFontSize(16);
+      doc.setTextColor(40, 40, 40);
+      doc.text('EMPLOYEE SUMMARY STATISTICS', 105, 20, null, null, 'center');
+
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Total Employees: ${perUserSummary.length}`, 105, 28, null, null, 'center');
+
+      // UPDATED: Removed Holiday column from summary headers
+      const summaryHeaders = ['Employee Name', 'Emp ID', 'Present', 'Absent', 'Half Days', 'Permission', 'Attendance %'];
+      const summaryColWidths = [40, 20, 15, 15, 25, 15, 25];
+
+      let summaryY = 40;
+
+      doc.setFillColor(41, 128, 185);
+      doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+
+      xPos = 20;
+      summaryHeaders.forEach((header, i) => {
+        doc.text(header, xPos + 2, summaryY + 5);
+        xPos += summaryColWidths[i];
+      });
+
+      summaryY += 10;
       doc.setTextColor(40, 40, 40);
       doc.setFontSize(7);
 
-      filteredAttendance.forEach((record, index) => {
-        if (y > doc.internal.pageSize.height - 20) {
+      perUserSummary.forEach((user, index) => {
+        if (summaryY > doc.internal.pageSize.height - 20) {
           doc.addPage();
-          y = 20;
+          summaryY = 20;
 
-          doc.setFillColor(52, 152, 219);
-          doc.rect(20, y, colWidths.reduce((a, b) => a + b), 8, 'F');
+          doc.setFillColor(41, 128, 185);
+          doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 8, 'F');
           doc.setTextColor(255, 255, 255);
 
           xPos = 20;
-          headers.forEach((header, i) => {
-            doc.text(header, xPos + 2, y + 5);
-            xPos += colWidths[i];
+          summaryHeaders.forEach((header, i) => {
+            doc.text(header, xPos + 2, summaryY + 5);
+            xPos += summaryColWidths[i];
           });
 
-          y += 10;
+          summaryY += 10;
           doc.setTextColor(40, 40, 40);
         }
 
         if (index % 2 === 0) {
           doc.setFillColor(245, 245, 245);
-          doc.rect(20, y, colWidths.reduce((a, b) => a + b), 7, 'F');
+          doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 7, 'F');
         }
 
-        const getStatus = (record) => {
-          if (isHolidayRecord(record)) return 'Holiday';
-          if (record.is_absent) return 'Absent';
-          if (record.check_in && !record.check_out) return 'Checked In';
-          if (record.check_in && record.check_out) return 'Checked Out';
-          return 'Not Checked In';
-        };
+        const halfDaysText = user.halfDays > 0 ?
+          `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` :
+          user.halfDays.toString();
 
-        const formatTime = (datetime) => {
-          if (!datetime) return "-";
-          try {
-            const dateObj = new Date(datetime);
-            return dateObj.toLocaleTimeString('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              hour12: true,
-              hour: '2-digit',
-              minute: '2-digit',
-            });
-          } catch {
-            return "-";
-          }
-        };
-
-        const recordData = [
-          record.date || '-',
-          record.user_info?.employee_id || '-',
-          record.user_info?.name?.substring(0, 15) || '-',
-          record.user_info?.designation?.substring(0, 12) || '-',
-          formatTime(record.check_in),
-          formatTime(record.check_out),
-          record.total_time_formatted?.substring(0, 8) || '-',
-          getStatus(record),
-          record.absence_reason?.substring(0, 20) || '-',
-          record.manual_entry ? 'Manual' : 'Auto'
+        // UPDATED: Removed Holiday from data array
+        const userData = [
+          user.name.length > 12 ? user.name.substring(0, 11) + '...' : user.name,
+          user.employeeId,
+          user.present.toString(),
+          user.absent.toString(),
+          halfDaysText,
+          user.permission.toString(),
+          user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`
         ];
 
         xPos = 20;
-        recordData.forEach((cell, i) => {
-          if (i === 7) {
-            const status = cell.toLowerCase();
-            if (status.includes('holiday')) {
-              doc.setTextColor(156, 39, 176);
-            } else if (status.includes('absent')) {
-              doc.setTextColor(211, 47, 47);
-            } else if (status.includes('present') || status.includes('checked out')) {
+        userData.forEach((cell, i) => {
+          if (i === 6 && user.attendanceRate !== 'N/A') { // Changed from i===7 to i===6
+            const rate = parseFloat(user.attendanceRate);
+            if (rate >= 90) {
               doc.setTextColor(46, 125, 50);
-            } else if (status.includes('checked in')) {
+            } else if (rate >= 70) {
               doc.setTextColor(245, 124, 0);
             } else {
-              doc.setTextColor(100, 100, 100);
+              doc.setTextColor(211, 47, 47);
             }
           } else {
             doc.setTextColor(40, 40, 40);
           }
 
-          doc.text(cell.toString(), xPos + 2, y + 5);
-          xPos += colWidths[i];
-        });
-
-        y += 7;
-      });
-
-      if (perUserSummary.length > 0) {
-        doc.addPage();
-
-        doc.setFontSize(16);
-        doc.setTextColor(40, 40, 40);
-        doc.text('EMPLOYEE SUMMARY STATISTICS', 105, 20, null, null, 'center');
-
-        doc.setFontSize(10);
-        doc.setTextColor(100, 100, 100);
-        doc.text(`Total Employees: ${perUserSummary.length}`, 105, 28, null, null, 'center');
-
-        const summaryHeaders = ['Employee Name', 'Emp ID', 'Present', 'Absent', 'Holiday', 'Half Days', 'Permission', 'Attendance %'];
-        const summaryColWidths = [40, 20, 12, 12, 12, 20, 15, 20];
-
-        let summaryY = 40;
-
-        doc.setFillColor(41, 128, 185);
-        doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 8, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(8);
-
-        xPos = 20;
-        summaryHeaders.forEach((header, i) => {
-          doc.text(header, xPos + 2, summaryY + 5);
+          doc.text(cell.toString(), xPos + 2, summaryY + 5);
           xPos += summaryColWidths[i];
         });
 
-        summaryY += 10;
-        doc.setTextColor(40, 40, 40);
-        doc.setFontSize(7);
-
-        perUserSummary.forEach((user, index) => {
-          if (summaryY > doc.internal.pageSize.height - 20) {
-            doc.addPage();
-            summaryY = 20;
-
-            doc.setFillColor(41, 128, 185);
-            doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 8, 'F');
-            doc.setTextColor(255, 255, 255);
-
-            xPos = 20;
-            summaryHeaders.forEach((header, i) => {
-              doc.text(header, xPos + 2, summaryY + 5);
-              xPos += summaryColWidths[i];
-            });
-
-            summaryY += 10;
-            doc.setTextColor(40, 40, 40);
-          }
-
-          if (index % 2 === 0) {
-            doc.setFillColor(245, 245, 245);
-            doc.rect(20, summaryY, summaryColWidths.reduce((a, b) => a + b), 7, 'F');
-          }
-
-          const halfDaysText = user.halfDays > 0 ?
-            `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` :
-            user.halfDays.toString();
-
-          const userData = [
-            user.name.length > 12 ? user.name.substring(0, 11) + '...' : user.name,
-            user.employeeId,
-            user.present.toString(),
-            user.absent.toString(),
-            (user.holiday || 0).toString(),
-            halfDaysText,
-            user.permission.toString(),
-            user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`
-          ];
-
-          xPos = 20;
-          userData.forEach((cell, i) => {
-            if (i === 7 && user.attendanceRate !== 'N/A') {
-              const rate = parseFloat(user.attendanceRate);
-              if (rate >= 90) {
-                doc.setTextColor(46, 125, 50);
-              } else if (rate >= 70) {
-                doc.setTextColor(245, 124, 0);
-              } else {
-                doc.setTextColor(211, 47, 47);
-              }
-            } else if (i === 4) {
-              doc.setTextColor(156, 39, 176);
-            } else {
-              doc.setTextColor(40, 40, 40);
-            }
-
-            doc.text(cell.toString(), xPos + 2, summaryY + 5);
-            xPos += summaryColWidths[i];
-          });
-
-          summaryY += 7;
-        });
-
-        summaryY += 10;
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0);
-        doc.text('Overall Statistics:', 20, summaryY);
-
         summaryY += 7;
-        doc.setFontSize(8);
+      });
 
-        const statsLines = [
-          `• Total Employees: ${perUserSummary.length}`,
-          `• Total Present Days: ${overallStats.totalPresent}`,
-          `• Total Absent Days: ${overallStats.totalAbsent}`,
-          `• Total Holiday Days: ${overallStats.totalHoliday || 0}`,
-          `• Total Half Days: ${overallStats.totalHalfDays} (FN: ${overallStats.halfDayFN}, AN: ${overallStats.halfDayAN})`,
-          `• Total Permission Days: ${overallStats.totalPermission}`,
-          `• Average Attendance Rate: ${overallStats.averageAttendanceRate}`,
-          `• Date Range: ${filters.startDate && filters.endDate ?
-            `${filters.startDate} to ${filters.endDate}` : filters.date || 'All dates'}`
-        ];
+      summaryY += 10;
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Overall Statistics:', 20, summaryY);
 
-        statsLines.forEach((line, idx) => {
-          doc.text(line, 25, summaryY + (idx * 4));
-        });
-      }
-
-      const totalY = doc.internal.pageSize.height - 10;
+      summaryY += 7;
       doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Page ${doc.internal.getNumberOfPages()} | Generated on: ${new Date().toLocaleDateString()}`, 145, totalY, null, null, 'center');
 
-      const filename = `attendance-detailed-report-${new Date().toISOString().split('T')[0]}.pdf`;
-      doc.save(filename);
+      // UPDATED: Removed Holiday from overall stats display
+      const statsLines = [
+        `• Total Employees: ${perUserSummary.length}`,
+        `• Total Present Days: ${overallStats.totalPresent}`,
+        `• Total Absent Days: ${overallStats.totalAbsent}`,
+        `• Total Half Days: ${overallStats.totalHalfDays} (FN: ${overallStats.halfDayFN}, AN: ${overallStats.halfDayAN})`,
+        `• Total Permission Days: ${overallStats.totalPermission}`,
+        `• Average Attendance Rate: ${overallStats.averageAttendanceRate}`,
+        `• Date Range: ${filters.startDate && filters.endDate ?
+          `${filters.startDate} to ${filters.endDate}` : filters.date || 'All dates'}`
+      ];
 
-    } catch (err) {
-      console.error('Detailed PDF error:', err);
-      alert('Error generating detailed PDF: ' + err.message);
+      statsLines.forEach((line, idx) => {
+        doc.text(line, 25, summaryY + (idx * 4));
+      });
     }
-  };
+
+    const totalY = doc.internal.pageSize.height - 10;
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Page ${doc.internal.getNumberOfPages()} | Generated on: ${new Date().toLocaleDateString()}`, 145, totalY, null, null, 'center');
+
+    const filename = `attendance-detailed-report-${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(filename);
+
+  } catch (err) {
+    console.error('Detailed PDF error:', err);
+    alert('Error generating detailed PDF: ' + err.message);
+  }
+};
 
   const handleViewYesterday = async () => {
     const yesterday = getYesterday();
@@ -1722,58 +1719,56 @@ useEffect(() => {
       </div>
 
       {/* Per-User Summary Section - Updated with Holiday */}
-      <div className="per-user-summary-section">
-        <h2>📊 Employee-wise Summary</h2>
-        <div className="per-user-summary-table">
-          <table className="summary-table">
-            <thead>
-              <tr>
-                <th>Employee Name</th>
-                <th>Emp ID</th>
-                <th>Present</th>
-                <th>Absent</th>
-                <th>Holiday</th>
-                <th>Half Days</th>
-                <th>Permission</th>
-                <th>Attendance %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAttendance.length > 0 ? (
-                calculatePerUserSummary().slice(0, 10).map((user, index) => (
-                  <tr key={`${user.employeeId}-${index}`}>
-                    <td>{user.name}</td>
-                    <td>{user.employeeId}</td>
-                    <td className={user.present > 0 ? 'present-cell' : ''}>{user.present}</td>
-                    <td className={user.absent > 0 ? 'absent-cell' : ''}>{user.absent}</td>
-                    <td className={user.holiday > 0 ? 'holiday-cell' : ''}>{user.holiday || 0}</td>
-                    <td className={user.halfDays > 0 ? 'halfday-cell' : ''}>
-                      {user.halfDays > 0 ? `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` : '0'}
-                    </td>
-                    <td className={user.permission > 0 ? 'permission-cell' : ''}>{user.permission}</td>
-                    <td className={`attendance-cell ${user.attendanceRate === 'N/A' ? 'na' : user.attendanceRate >= 90 ? 'excellent' : user.attendanceRate >= 70 ? 'good' : 'poor'}`}>
-                      {user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="8" className="no-data">
-                    No data available
-                  </td>
-                </tr>
-              )}
-              {calculatePerUserSummary().length > 10 && (
-                <tr>
-                  <td colSpan="8" className="more-users">
-                    ... and {calculatePerUserSummary().length - 10} more employees
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+<div className="per-user-summary-section">
+  <h2>📊 Employee-wise Summary</h2>
+  <div className="per-user-summary-table">
+    <table className="summary-table">
+      <thead>
+        <tr>
+          <th>Employee Name</th>
+          <th>Emp ID</th>
+          <th>Present</th>
+          <th>Absent</th>
+          <th>Half Days</th>
+          <th>Permission</th>
+          <th>Attendance %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filteredAttendance.length > 0 ? (
+          calculatePerUserSummary().slice(0, 10).map((user, index) => (
+            <tr key={`${user.employeeId}-${index}`}>
+              <td>{user.name}</td>
+              <td>{user.employeeId}</td>
+              <td className={user.present > 0 ? 'present-cell' : ''}>{user.present}</td>
+              <td className={user.absent > 0 ? 'absent-cell' : ''}>{user.absent}</td>
+              <td className={user.halfDays > 0 ? 'halfday-cell' : ''}>
+                {user.halfDays > 0 ? `${user.halfDays} (${user.halfDayFN}FN/${user.halfDayAN}AN)` : '0'}
+              </td>
+              <td className={user.permission > 0 ? 'permission-cell' : ''}>{user.permission}</td>
+              <td className={`attendance-cell ${user.attendanceRate === 'N/A' ? 'na' : user.attendanceRate >= 90 ? 'excellent' : user.attendanceRate >= 70 ? 'good' : 'poor'}`}>
+                {user.attendanceRate === 'N/A' ? 'N/A' : `${user.attendanceRate}%`}
+              </td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td colSpan="7" className="no-data">
+              No data available
+            </td>
+          </tr>
+        )}
+        {calculatePerUserSummary().length > 10 && (
+          <tr>
+            <td colSpan="7" className="more-users">
+              ... and {calculatePerUserSummary().length - 10} more employees
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
 
       {/* PDF Generation Status */}
       {generatingPDF && (
